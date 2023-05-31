@@ -1,4 +1,4 @@
-# markdown.awk
+# gf-markdown-awk
 Awk library to convert GitHub-flavored markdown to HTML or to plain text.
 
 To use this to make a program that converts markdown to HTML, write the following Awk code:
