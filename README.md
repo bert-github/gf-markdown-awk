@@ -21,7 +21,7 @@ You could, of course, call an external program from your Awk script to convert m
 The former is provided by the function `markdown::to_inline_html()`, the latter by the function `markdown::to_text()`.
 
 ## Limitations
-The code does not (yet?) implement ‘setexts headings’ (headings that are underlined instead of prefixed with one or more ‘#’ characters) and ‘tight lists’ (lists where the generated HTML looks like `<li>item</li>` instead of `<li><p>item</p></li>`.
+The code does not (yet?) implement ‘setexts headings’ (headings that are underlined instead of prefixed with one or more ‘#’ characters) and ‘tight lists’ (lists where the generated HTML looks like `<li>item</li>` instead of `<li><p>item</p></li>`).
 
 ## Bugs
 Probably.
