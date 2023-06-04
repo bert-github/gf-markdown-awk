@@ -68,6 +68,9 @@
 #     Returns the version of this library, currently "0.2".
 #
 #
+# Copyright © 2023 World Wide Web Consortium.
+# See the file COPYING.
+#
 # Created: 28 May 2023
 # Author: Bert Bos <bert@w3.org>
 
