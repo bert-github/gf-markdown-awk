@@ -36,8 +36,8 @@
 #
 #     This function is given a string with markdown text and returns
 #     an HTML fragment with only inline HTML. If the string contains
-#     markdown for block elements, those are not interpreted treated
-#     as text.
+#     markdown for block elements, those are not interpreted and
+#     treated as text.
 #
 #     Example:
 #
@@ -71,6 +71,8 @@
 # Created: 28 May 2023
 # Author: Bert Bos <bert@w3.org>
 
+@include "htmlmathml.awk"
+
 @namespace "markdown"
 
 
@@ -98,8 +100,7 @@ function to_html(s,	n, i, lines, stack, curblock, result)
 
 
 # to_inline_html -- convert markdown to inline HTML
-function to_inline_html(s,
-			rstart, rstart1, z, y, x, h)
+function to_inline_html(s,	rstart, rstart1, z, y, x, h)
 {
   if ((rstart1 = match(s, /(^|[^\\])?((<\/?[a-zA-Z0-9_-]+|!?\[|[`~_*])(.*))/, z))) {
     #                             1         23                               4
@@ -200,20 +201,29 @@ function to_inline_html(s,
     # printf " \"%s\"\n", s > "/dev/stderr"
     # Remove escapes. Backslash + newline and two or more spaces +
     # newline turn into <br>.
+    # TODO: This also turns "&bsol;" + newline into "<br>". Is that right?
     return awk::gensub(/(\\|  +)\n/, "<br>\n", "g", esc_html(unesc_md(s)))
   }
 }
 
 
 # to_text -- remove markdown
-function to_text(s)
+function to_text(s,	t)
 {
   # First convert the markdown to HTML and then remove all HTML tags,
   # replace HTML entities and remove the final newline. (Internal
-  # newlines remain.)
+  # newlines remain.) The function to_html() already replaced all
+  # character entities other than "&lt;", "&gt;", "&quot;" and
+  # "&amp;".
   #
-  return awk::gensub(/\n$/, "", 1,
-    unesc_html(awk::gensub(/<[^>]*>/, "", "g", to_html(s))))
+  t = to_html(s)
+  gsub(/<[^>]*>/, "", t)
+  gsub(/&quot;/, "\"", t)
+  gsub(/&gt;/, ">", t)
+  gsub(/&lt;/, "<", t)
+  gsub(/&amp;/, "\\&", t)
+  gsub(/\n$/, "", t)
+  return t
 }
 
 
@@ -586,11 +596,26 @@ function close_blocks(stack, level, curblock, result,	curtype)
 }
 
 
-# unesc_md -- unescape backslashed punctuation in markdown
-function unesc_md(s)
+# unesc_md -- unescape backslashed punctuation & character entities in markdown
+function unesc_md(s,	t, a, h)
 {
-  # Only ASCII punctuation can be escaped.
-  return awk::gensub(/\\([!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~}-])/, "\\1", "g", s)
+  # Loop over s looking for backslash + punctuation or HTML character
+  # entities. Unknown entity references are copied as is. Backslashes
+  # not followed by punctuation are copied as-is, Ampersands not
+  # followed by an entity name or number are also copied as-is.
+  #
+  t = ""
+  while (match(s, /\\([!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~}-])|&([a-zA-Z][a-zA-Z0-9.-]*|#(x[0-9a-fA-F]+|[0-9]+));/, a)) {
+    if (a[0] ~ /^\\/) h = a[1]
+    else if (a[2] ~ /^#x/) h = sprintf("%c", strtonum("0" a[3]))
+    else if (a[2] ~ /^#/) h = sprintf("%c", a[3])
+    else if (a[2] in htmlmathml::ent) h = htmlmathml::ent[a[2]]
+    else h = a[0]		# Unknown named entity, leave as-is
+    t = t substr(s, 1, RSTART - 1) h
+    s = substr(s, RSTART + RLENGTH)
+  }
+
+  return t s
 }
 
 
@@ -601,17 +626,6 @@ function esc_html(s)
   gsub(/</, "\\&lt;", s)
   gsub(/>/, "\\&gt;", s)
   gsub(/"/, "\\&quot;", s)
-  return s
-}
-
-
-# unesc_html -- unescape HTML delimiters
-function unesc_html(s)
-{
-  gsub(/\\&lt;/, "<", s)
-  gsub(/\\&gt;/, ">", s)
-  gsub(/\\&quot;/, "\"", s)
-  gsub(/\\&amp;/, "&", s)
   return s
 }
 
@@ -743,7 +757,7 @@ function assert(condition, string)
   if (! condition) {
     printf "%s:%d: assertion failed: %s\n",
       FILENAME, FNR, string > "/dev/stderr"
-    _assert_exit = 1
+    awk::_assert_exit = 1
     exit 1
   }
 }
