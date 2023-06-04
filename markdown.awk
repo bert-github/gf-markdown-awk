@@ -65,7 +65,7 @@
 #
 # markdown::version()
 #
-#     Returns the version of this library, currently "0.1".
+#     Returns the version of this library, currently "0.2".
 #
 #
 # Created: 28 May 2023
@@ -79,7 +79,7 @@
 # version -- return the version number of this library
 function version()
 {
-  return "0.1"
+  return "0.2"
 }
 
 
