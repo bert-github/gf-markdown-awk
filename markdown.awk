@@ -131,6 +131,7 @@ function to_inline_html(s,	rstart, rstart1, z, y, x, h)
 	       (rstart = match(x[2], "[^\\\\]" x[1] "(.*)", y))) {
       # Inline code: `...` or ``...`` or etc.
       h = substr(x[2], 1, rstart) # Include the char before closing delim
+      gsub(/\n/, " ", h);	  # All newlines must become spaces
       if (h ~ /^[ \t].*[ \t]$/) h = substr(h, 2, length(h) - 2)
       return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
 	"<code>" esc_html(h) "</code>" to_inline_html(y[1])
@@ -283,7 +284,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
       open_block(stack, result, h, "<p>")
       add_line_to_tree(stack, level, a["content"], curblock, result)
     } else if (h == "fenced-code") {
-      open_block(stack, result, h " " a["type"],
+      open_block(stack, result, h " " a["indent"] " " a["type"],
 	"<pre" (a["class"] ? " class=\"" a["class"] "\"" : "") "><code>")
     } else {
       assert(0, "Unhandled line type " h " in add_line_to_tree")
@@ -370,7 +371,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
 	add_line_to_tree(stack, level + 1, unindent_line(line, curtype[2]),
 			 curblock, result)
       } else {
-	# The indent of the is not enough to be sure that it is part
+	# The indent of the line is not enough to be sure that it is part
 	# of the current list item of this list. Remove whatever
 	# indentation it has and see what kind of line it is.
 	f = unindent_line(line, curtype[2])
@@ -404,14 +405,23 @@ function add_line_to_tree(stack, level, line, curblock, result,
       add_line_to_tree(stack, level + 1, line, curblock, result)
       break
     case "fenced-code":
-      if (h == "fenced-code" && curtype[2] ~ "^" a["type"])
+      if (h == "fenced-code" && a["type"] ~ curtype[3])
 	# The line is a fenced code marker (``` or ~~~) of the same
 	# type and at least as long as the marker that started the
 	# fenced code block. So this is the end of the block.
 	close_blocks(stack, level, curblock, result)
       else
-	# Any other line is added verbatim to this block.
-	push(curblock, line)
+	# Any other line is added verbatim to this block, except that
+	# its indent is reduced by the indent of the code fence that
+	# started the block.
+	push(curblock, unindent_line(line, curtype[2]))
+      break
+    case "thematic-break":
+      # A thematic break is always one line, so this new line closes
+      # the thematic break. Then recursively call self to create a
+      # block for this new line.
+      close_blocks(stack, level, curblock, result)
+      add_line_to_tree(stack, level, line, curblock, result)
       break
     default:
       assert(0, "Unhandled block type " curtype[1] " in add_line_to_tree")
@@ -440,7 +450,7 @@ function type_of_line(line, parts,	a, h)
   #
   # "indent": A number >= 0 indicating in which column the "content"
   #   part starts, after expanding tabs, where tabs stops are assumed
-  #   every 4 characters. (list)
+  #   every 4 characters. (list, fenced-code)
   #
   # "start": A string with a decimal number indicating the number of
   #   the first item in an ordered list. Only defined if "type" ==
@@ -459,15 +469,18 @@ function type_of_line(line, parts,	a, h)
   } else if (indent_size(line) >= 4) {
     parts["content"] = unindent_line(line, 4)
     return "indented-code"
-  } else if (match(line, /^\s*((```+)([^`]*)|(~~~+)([^~]*))$/, a)) {
+  } else if (match(line, /^\s*((```+)([^`].*)?|(~~~+)([^~].*)?)$/, a)) {
     parts["type"] = a[2] a[4]
-    parts["info"] = trim(a[3] a[5])
+    parts["info"] = awk::gensub(/^\s+/,"",1,awk::gensub(/\s+$/, "",1,a[3] a[5]))
     parts["class"] = parts["info"] ?
       "language-" awk::gensub(/\s.*/, "", 1, parts["info"]) : ""
+    parts["indent"] = indent_size(line)
     return "fenced-code"
   } else if (match(line, /^\s*>\s?(.*)/, a)) {
     parts["content"] = a[1]
     return "blockquote"
+  } else if (match(line, /^\s*((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/)) {
+    return "thematic-break"
   } else if (match(line, /^\s*([*+-])(\s(.*))?$/, a)) {
     parts["content"] = a[3]
     parts["type"] = a[1]
@@ -484,8 +497,6 @@ function type_of_line(line, parts,	a, h)
     parts["content"] = a[3]
     parts["level"] = length(a[1])
     return "heading"
-  } else if (match(line, /^\s*((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/)) {
-    return "thematic-break"
   } else if (match(line, /^\s*(.*)$/, a)) {
     parts["content"] = a[1]
     return "paragraph"
