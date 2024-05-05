@@ -68,7 +68,7 @@
 #     Returns the version of this library, currently "0.2".
 #
 #
-# Copyright © 2023 World Wide Web Consortium.
+# Copyright © 2023-2024 World Wide Web Consortium.
 # See the file COPYING.
 #
 # Created: 28 May 2023
@@ -95,7 +95,7 @@ function to_html(s,	n, i, lines, stack, curblock, result)
   n = split(s, lines, /\n/)
   for (i = 1; i <= n; i++) {
     # printf "Next line: \"%s\"\n", lines[i] > "/dev/stderr"
-    add_line_to_tree(stack, 1, lines[i], curblock, result)
+    add_line_to_tree(stack, 1, expand_tabs(lines[i]), curblock, result)
   }
   close_blocks(stack, 1, curblock, result)
   return join(result)
@@ -103,111 +103,308 @@ function to_html(s,	n, i, lines, stack, curblock, result)
 
 
 # to_inline_html -- convert markdown to inline HTML
-function to_inline_html(s,	rstart, rstart1, z, y, x, h)
+function to_inline_html(s,		t, n, i, x, replacements)
 {
-  if ((rstart1 = match(s, /(^|[^\\])?((<\/?[a-zA-Z0-9_-]+|!?\[|[`~_*])(.*))/, z))) {
-    #                             1         23                               4
-    # z[1] = last char before delimiter, or undefined if none
-    # z[2] = the part of s that starts with the delimiter
-    # z[3] = the delimiter
-    # z[4] = the part of s after the delimiter
-    # Treat HTML tags, autolinks, images, hyperlinks, inline code,
-    # strikethrough and emphasis from left to right.
-    # printf " Possible delim: \"%s\"\n", z[3] > "/dev/stderr"
+  s = inline(s, 0, replacements)
 
-    if (match(z[2], /^<([a-zA-Z]+:[^>[:space:]]+)>(.*)/, x)) {
-      # Autolink (URL): <scheme:...>
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<a href=\"" esc_html(x[1]) "\">" esc_html(x[1]) "</a>"			\
-	to_inline_html(x[3])
-
-    } else if (match(z[2], /^(<\/?([a-zA-Z][a-zA-Z0-9_-]*)(\s[^>]*)?>)(.*)/, x) &&
-	       x[2] !~ /^(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)$/) {
-      # Looks like an allowed HTML tag. Copy unchanged.
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	x[1] to_inline_html(x[4])
-
-    } else if (match(z[2], /^(`+)(.*)/, x) &&
-	       (rstart = match(x[2], "[^\\\\]" x[1] "(.*)", y))) {
-      # Inline code: `...` or ``...`` or etc.
-      h = substr(x[2], 1, rstart) # Include the char before closing delim
-      gsub(/\n/, " ", h);	  # All newlines must become spaces
-      if (h ~ /^[ \t].*[ \t]$/) h = substr(h, 2, length(h) - 2)
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<code>" esc_html(h) "</code>" to_inline_html(y[1])
-
-    } else if (match(z[2], /^!\[(([^\]]|\\\])+)\]\(\s*(<([^>]*)>|([^\)[:space:]]*))([ \t]+("([^"]*)"|'([^']*)'|\(([^\)]*)\)))?\s*\)(.*)/, x)) {
-      #                         12                    3 4        5                 6      7 8         9          10                11
-      # x[1] = alt text, x[4] or x[5] = URL, x[8] or x[9] or x[10] = title
-      # Image: ![alt text](url) or  ![alt text](url "title")
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<img src=\"" esc_html(markdown::to_text(x[4] x[5])) "\" alt=\"" \
-	esc_html(markdown::to_text(x[1])) "\""				\
-	(x[6] ? " title=\"" esc_html(markdown::to_text(x[8] x[9] x[10])) "\"" :
-	 "") ">" to_inline_html(x[11])
-
-    } else if (match(z[2], /^\[(([^\]]|\\\])+)\]\(\s*(<([^>]*)>|([^\)[:space:]]*))([ \t]+("([^"]*)"|'([^']*)'|\(([^\)]*)\)))?\s*\)(.*)/, x)) {
-      #                        12                    3 4        5                 6      7 8         9          10                11
-      # Hyperlinks: [anchor](url) or [anchor](url "title")
-      # x[1] = anchor, x[4] or x[5] = URL, x[8] or x[9] or x[10] = title
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<a href=\"" esc_html(markdown::to_text(x[4] x[5])) "\""	\
-	(x[6] ? " title=\"" esc_html(markdown::to_text(x[8] x[9] x[10])) "\"" :
-	 "") ">" to_inline_html(x[1]) "</a>"	\
-	to_inline_html(x[11])
-
-    } else if (z[1] != "~" &&
-	       match(z[2], /^(~~?)([^~].*)/, x) &&
-	       (rstart = match(x[2], "[^~\\\\]" x[1] "([^~].*|$)", y))) {
-      # Strikethrough: ~...~ or ~~...~~
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<del>" to_inline_html(substr(x[2], 1, rstart)) "</del>" \
-	to_inline_html(y[1])
-
-    } else if (z[1] ~ /^[^[:alnum:]]?$/ &&
-	       (match(z[2], /^___([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]___([^[:alnum:]].*|$)|[^[:space:]\\]___([[:space:][:punct:]].*|$)/, y))) ||
-	       (match(z[2], /^\*\*\*([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]\*\*\*([^[:alnum:]].*|$)|[^[:space:]\\]\*\*\*([[:space:][:punct:]].*|$)/, y)))) {
-      # Bold + italic: ***...*** or ___...___
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<strong><em>" to_inline_html(substr(x[1], 1, rstart)) "</em></strong>" \
-	to_inline_html(y[1] y[2])
-
-    } else if (z[1] ~ /^[^[:alnum:]]?$/ &&
-	       (match(z[2], /^__([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]__([^[:alnum:]].*|$)|[^[:space:]\\]__([[:space:][:punct:]].*|$)/, y))) ||
-	       (match(z[2], /^\*\*([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]\*\*([^[:alnum:]].*|$)|[^[:space:]\\]\*\*([[:space:][:punct:]].*|$)/, y)))) {
-      # Bold : **...** or __...__
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<strong>" to_inline_html(substr(x[1], 1, rstart)) "</strong>"	\
-	to_inline_html(y[1] y[2])
-
-    } else if (z[1] ~ /^[^[:alnum:]]?$/ &&
-	       (match(z[2], /^_([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]_([^[:alnum:]].*|$)|[^[:space:]\\]_([[:space:][:punct:]].*|$)/, y))) ||
-	       (match(z[2], /^\*([^[:space:]].*)/, x) &&
-		(rstart = match(x[1], /[^[:space:][:punct:]]\*([^[:alnum:]].*|$)|[^[:space:]\\]\*([[:space:][:punct:]].*|$)/, y)))) {
-      # Bold : *...* or _..._
-      return to_inline_html(substr(s, 1, rstart1 - 1) z[1])	\
-	"<em>" to_inline_html(substr(x[1], 1, rstart)) "</em>"		\
-	to_inline_html(y[1] y[2])
-
-    } else {
-      # Unmatched delimiter, treat as text.
-      # printf " ... unmatched\n", z[3] > "/dev/stderr"
-      return esc_html(unesc_md(substr(s, 1, rstart1 - 1) z[1] z[3])) \
-	to_inline_html(z[4])
+  # Replace the <n> tags in s by the corresponding code that was
+  # stored in replacements. The replacements may themselves contain
+  # further tags, so repeat until there are no more changes (n == 0).
+  do {
+    t = ""
+    n = 0
+    while ((i = match(s, /\002([0-9]+)\003/, x))) {
+      # print "retrieve replacement " x[1] " -> " item(replacements, 0 + x[1]) > "/dev/stderr"
+      t = t substr(s, 1, i - 1) item(replacements, 0 + x[1])
+      s = substr(s, i + length(x[0]))
+      n++
     }
+    s = t s
+  } while (n)
 
-  } else {
-    # printf " \"%s\"\n", s > "/dev/stderr"
-    # Remove escapes. Backslash + newline and two or more spaces +
-    # newline turn into <br>.
-    # TODO: This also turns "&bsol;" + newline into "<br>". Is that right?
-    return awk::gensub(/(\\|  +)\n/, "<br>\n", "g", esc_html(unesc_md(s)))
+  return s
+}
+
+
+function inline(s, no_links, replacements,		result, t, i, x)
+{
+  # print "inline(\"" s "\", " no_links ",...)" > "/dev/stderr"
+
+  # Replace occurrences in s of code spans (`...`), autolinks (<url>)
+  # and HTML tags (elements, comments, CDATA sections, processing
+  # instructions) by "<n>" tags and put the corresponding HTML code in
+  # replacements at index n. The "<n>" tags actually consist of \002 +
+  # decimal number + \003.
+  t = ""
+  while ((i = match(s, /(^|[^\\])(`|<)(.*)/, x)))
+    if (inline_code_span(x[2] x[3], result, replacements) ||
+	inline_autolink(x[2] x[3], no_links, result, replacements) ||
+	inline_html_tag(x[2] x[3], result, replacements)) {
+      t = t substr(s, 1, i - 1) x[1] result["html"]
+      s = result["rest"]
+    } else {
+      t = t substr(s, 1, i - 1) x[1] x[2]
+      s = x[3]
+    }
+  s = t s
+  # print "after \"`\" and \"<\": \"" s "\"" > "/dev/stderr"
+
+  # Replace occurences in s of links ("[anchor](url)") or images
+  # ("![alt](url)") by "<n>" tags and put the corresponding HTML code
+  # in replacements.
+  t = ""
+  while ((i = match(s, /(^|[^\\])(!?\[)(.*)/, x)))
+    if (inline_link_or_image(x[2] x[3], no_links, result, replacements)) {
+      t = t substr(s, 1, i - 1) x[1] result["html"]
+      # print "so far: \"" t "\"" > "/dev/stderr"
+      s = result["rest"]
+    } else {
+      t = t substr(s, 1, i - 1) x[1] x[2]
+      s = x[3]
+    }
+  s = t s
+  # print "after links: \"" s "\"" > "/dev/stderr"
+
+  # Replace occurrences in s of bold (**...**, __...__) or italic
+  # (*...*, _..._) with tags "<n>" and put the corresponding HTML code
+  # in replacements.
+  t = ""
+  while ((i = match(s, /(^|[^\\])(_+|\*+)([^[:space:][:punct:]].*)|(^|[[:space:][:punct:]])(_+|\*+)([[:punct:]].*)/, x)))
+    if (inline_emphasis(x[2] x[3]  x[5] x[6], no_links, result, replacements)) {
+      t = t substr(s, 1, i - 1) x[1] x[4] result["html"]
+      s = result["rest"]
+    } else {
+      t = t substr(s, 1, i - 1) x[1] x[2]  x[4] x[5]
+      s = x[3] x[6]
+    }
+  s = t s
+  # print "after * and _: \"" s "\"" > "/dev/stderr"
+
+  # Replace occurrences in s of strikethrough (~...~, ~~...~~) with
+  # tags "<n>" and put the corresponding HTML code in replacements.
+  t = ""
+  while ((i = match(s, /(^|[^~\\])(~~?)([^~].*)/, x)))
+    if (inline_strikethrough(x[2] x[3], result, replacements)) {
+      t = t substr(s, 1, i - 1) x[1] result["html"]
+      s = result["rest"]
+    } else {
+      t = t substr(s, 1, i - 1) x[1] x[2]
+      s = x[3]
+    }
+  s = t s
+  # print "after ~: \"" s "\"" > "/dev/stderr"
+
+  # Replace hard line breaks by <br> and remove backslash escapes.
+  push(replacements, "<br />\n")
+  t = "\002" size(replacements) "\003"
+  s = awk::gensub(/ \n/, "\n", "g",
+    awk::gensub(/(  +|\\)\n/, t, "g", esc_html(unesc_md(s))))
+
+  return s
+}
+
+
+function inline_code_span(s, result, replacements,	x, content, t, n)
+{
+  # Check that s starts with a span of "`".
+  if (! match(s, /^(`+)(.*)/, x)) return 0
+  # Check that there is another span of "`" of equal length.
+  if (! (i = match(x[2], "[^`]" x[1] "([^`]|$)"))) return 0
+  # Replace newlines in the contents by spaces.
+  content = awk::gensub(/\n/, " ", "g", substr(x[2], 1, i))
+  # If there is a space both at start and end, remove it.
+  if (content ~ /^ .*[^ ].* $/) content = substr(content, 2, i - 2)
+  # Store HTML code in replacements.
+  t = "<code>" esc_html(content) "</code>"
+  push(replacements, t)
+  n = size(replacements)
+  # Return result.
+  result["html"] = "\002" n "\003"
+  result["rest"] = substr(x[2], i + length(x[1]) + 1)
+  # print "Found inline code <" n "> = " t > "/dev/stderr"
+  return 1
+}
+
+
+function inline_autolink(s, no_links, result,	replacements,	x, t, n)
+{
+  # print "inline_autolink(\"" s "\")" > "/dev/stderr"
+  if (match(s, /^<([a-zA-Z][a-zA-Z0-0+.-]+:[^>[:space:]]+)>(.*)/, x)) {
+    if (no_links) t = esc_html(x[1])
+    else t = "<a href=\"" esc_html(esc_url(x[1])) "\">" esc_html(x[1]) "</a>"
+  } else if (match(s, /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>(.*)/, x)) {
+    if (no_links) t = esc_html(x[1])
+    else t = "<a href=\"mailto:" esc_html(x[1]) "\">" esc_html(x[1]) "</a>"
+  } else {			# Neither URL nor email address
+    return 0
   }
+  push(replacements, t)		# Store the HTML code in replacements
+  n = size(replacements)	# Get the index where it was stored
+  result["html"] = "\002" n "\003" # The tag to replace the auutolink with
+  result["rest"] = substr(s, length(x[0]) + 1)
+  # print "Found autolink <" n "> = " t > "/dev/stderr"
+  return 1
+}
+
+
+function inline_html_tag(s, result, replacements,	x, t, n)
+{
+  # print "inline_html_tag(\"" s "\",...)" > "/dev/stderr"
+  if (((match(s, /^<([a-zA-Z][a-zA-Z0-9_-]*)(\s+[a-zA-Z0-9:_][a-zA-Z0-9_.:-]*(\s*=\s*([^[:space:]"'=<>`]+|"[^"]*"|'[^']*'))?)*\s*\/?>/, x) ||
+	match(s, /^<\/([a-zA-Z][a-zA-Z0-9_-]*)\s*>/, x)) &&
+       tolower(x[1]) !~ /^(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)$/) ||
+      match(s, /^<!\[CDATA\[([^\]]|\][^\]]|\]\][^>])*\]\]>/, x) ||
+      match(s, /^<!--([^->]|-[^->])*-->/, x) ||
+      match(s, /^<![a-zA-Z][^>]*>/, x) ||
+      match(s, /^<\?([^?>]|\?[^>])*\?>/, x)) {
+    t = x[0]			# Copy the tag verbatim
+    push(replacements, t)	# Store the HTML code in replacements
+    n = size(replacements)	# Get the index where it was stored
+    result["html"] = "\002" n "\003"	# The tag to replace the auutolink with
+    result["rest"] = substr(s, length(x[0]) + 1)
+    # print "Found HTML tag <" n "> = " t > "/dev/stderr"
+    return 1
+  }
+  return 0
+}
+
+
+function inline_link_or_image(s, no_links, result, replacements,
+			      x, t, u, n, i, is_image)
+{
+  # print "trying inline_link_or_image(\"" s "\", " no_links ",...)" > "/dev/stderr"
+  if (s ~ /^!\[/) { is_image = 1; s = substr(s, 3) }
+  else if (s ~ /^\[/) { is_image = 0; s = substr(s, 2) }
+  else return 0
+
+  # Collect in t all the text between the initial "[" and the matching
+  # "]" (the anchor text), while allowing matching bracket pairs to
+  # occur between the two. Set s to the string starting with the
+  # matching "]".
+  t = ""
+  n = 0
+  while ((i = match(s, /[][]/, x))) {
+    if (x[0] == "[") {
+      n++
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
+    } else if (n != 0) {
+      n--
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
+    } else {
+      t = t substr(s, 1, i - 1)
+      s = substr(s, i)
+      break
+    }
+  }
+  # print "anchor = \"" t "\"" > "/dev/stderr"
+
+  # If s does not start with "](...)", this is not a link.
+  if (! match(s, /^\]\(\s*(<([^>]*)>|([^\)[:space:]]*))(\s+"([^"]*)"|\s+'([^']*)'|\s+\(([^\)]*)\))?\s*\)(.*)/, x))
+    #                     1 2     2  3               314    5     5      6     6       7      7  4      8  8
+    return 0
+
+  # print "Found URL: \"" x[2] x[3] "\"" > "/dev/stderr"
+
+  # Convert the anchor text t to HTML. The 1 indicates that no links
+  # are allowed in that text.
+  t = inline(t, 1, replacements)
+
+  # Create the HTML code for the link or image.
+  if (is_image) {
+    u = "<img src=\"" esc_html(esc_url(x[2] x[3])) "\"" \
+      " alt=\"" esc_html(to_text(t)) "\""
+    if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
+    u = u " />"
+  } else if (no_links) {	     # Nested links not allowed, use text only
+    u = t
+  } else {
+    u = "<a href=\"" esc_html(esc_url(x[2] x[3])) "\""
+    if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
+    u = u ">" t "</a>"
+  }
+
+  # Store the HTML code in replacements at index n and return a tag
+  # "<n>".
+  push(replacements, u)
+  result["html"] = "\002" size(replacements) "\003"
+  result["rest"] = x[8]
+  return 1
+}
+
+
+function inline_emphasis(s, no_links, result, replacements,	x, y, z, t, n, i, j, result1)
+{
+  # print "trying inline_emphasis(\"" s "\",...)" > "/dev/stderr"
+  # if (s !~ /^[_*]/) return 0
+  assert(s ~ /^[_*]/, "s ~ /^[_*]/")
+
+  match(s, /^(_+|\*+)/)
+  t = substr(s, 1, RLENGTH)
+  result["rest"] = substr(s, RLENGTH + 1)
+
+  while (match(s, /^((_)+|(\*)+)(.*)/, x) &&
+	 (i = match(x[4], "([^[:space:][:punct:]])(" x[2] x[3] "+)(.*)|([[:punct:]])(" x[2] x[3] "+)([[:punct:][:space:]].*|$)", y))) {
+
+    # Check if there is a left-flanking delimiter of the same type
+    # ("_" or "*") before i. If so, process that one first.
+    j = match(x[4], "(^|[^\\\\])(" x[2] x[3] "+)([^[:space:][:punct:]].*)|(^|[[:space:][:punct:]])(" x[2] x[3] "+)([[:punct:]].*)", z)
+    # print "i=" i " j=" j " x[4]=\"" x[4] "\"" > "/dev/stderr"
+    if (j != 0 && j < i &&
+	inline_emphasis(z[2] z[3]  z[5] z[6], no_links, result1, replacements)) {
+      t = x[1] substr(x[4], 1, j - 1) z[1] z[4] result1["html"]
+      result["rest"] = result1["rest"]
+      s = result["html"] result["rest"]
+    } else {
+      # print "found " x[1] " matched by " y[2] y[5] > "/dev/stderr"
+      n = length(y[2] y[5])
+      if (n > length(x[1])) n = length(x[1])
+      t = inline(substr(x[4], 1, i), no_links, replacements)
+      if (n > 1) {
+	push(replacements, "<strong>")
+	t = "\002" size(replacements) "\003" t
+	push(replacements, "</strong>")
+	t = t "\002" size(replacements) "\003"
+      }
+      if (n % 2 == 1) {
+	push(replacements, "<em>")
+	t = "\002" size(replacements) "\003" t
+	push(replacements, "</em>")
+	t = t "\002" size(replacements) "\003"
+      }
+      t = substr(s, 1, length(x[1]) - n) t
+      result["rest"] = substr(y[2] y[5], 1, length(y[2] y[5]) - n) y[3] y[6]
+      s = result["html"] result["rest"]
+    }
+  }
+  push(replacements, t)
+  result["html"] = "\002" size(replacements) "\003"
+  # print "emphasized result = \"" t "\"" > "/dev/stderr"
+  # print "rest = \"" result["rest"] "\"" > "/dev/stderr"
+  return 1
+}
+
+
+function inline_strikethrough(s, no_links, result, replacements,	x, y, t, i)
+{
+  assert(s !~ /^~/, "s !~ /^~/")
+  # print "trying inline_strikethrough(\"" s "\", " no_links ",...)" > "/dev/stderr"
+
+  if ((match(s, /^~~(.*)/, x) &&
+       (i = match(x[1], /[^~\\](~~)([^~].*|$)/, y))) ||
+      (match(s, /^~([^~].*)/, x) &&
+       (i = match(x[1], /[^~\\](~)([^~].*|$)/, y)))) {
+    push(replacements, "<s>")
+    t = "\002" size(replacements) "\003"
+    t = t inline(substr(x[1], 1, i), no_links, replacements)
+    push(replacements, "</s>")
+    t = t "\002" size(replacements) "\003"
+    result["html"] = t
+    result["rest"] = y[2]
+    return 1
+  }
+  return 0
 }
 
 
@@ -221,13 +418,49 @@ function to_text(s,	t)
   # "&amp;".
   #
   t = to_html(s)
+
+  # Remove comments.
+  gsub(/^<!--([^->]|-[^->])*-->/, "", t)
+
+  # Replace images by their alt text.
+  t = awk::gensub(/<img\>[^>]*\<alt="([^"]*)"[^>]*>/, "\\1", "g", t)
+  t = awk::gensub(/<img\>[^>]*\<alt='([^']*)'[^>]*>/, "\\1", "g", t)
+
+  # Remove all other tags.
   gsub(/<[^>]*>/, "", t)
+
+  # Replace remaining entities.
   gsub(/&quot;/, "\"", t)
   gsub(/&gt;/, ">", t)
   gsub(/&lt;/, "<", t)
   gsub(/&amp;/, "\\&", t)
+
+  # Remove final newline.
   gsub(/\n$/, "", t)
+  # print "to_text(\"" s "\") -> \"" t "\"" > "/dev/stderr"
   return t
+}
+
+
+# expand_tabs - replace tabs by the right number of spaces
+function expand_tabs(line,	result, col, c)
+{
+  # This is wrong, tabs are not supposed to be replaced by spaces,
+  # except at the start of a line.
+
+  result = ""
+  col = 1
+  while (line != "") {
+    c = substr(line, 1, 1)
+    line = substr(line, 2)
+    if (c == "\t") {
+      do { result = result " "; col++ } while (col % 4 != 1)
+    } else {
+      result = result c
+      col++
+    }
+  }
+  return result
 }
 
 
@@ -268,7 +501,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
       open_block(stack, result, "placeholder", "")
       add_line_to_tree(stack, level + 1, a["content"], curblock, result)
     } else if (h == "thematic-break") {
-      open_block(stack, result, h, "<hr>\n")
+      open_block(stack, result, h, "<hr />\n")
     } else if (h == "heading") {
       open_block(stack, result, h " " a["level"], "<h" a["level"] ">")
       push(curblock, a["content"])
@@ -277,7 +510,8 @@ function add_line_to_tree(stack, level, line, curblock, result,
 	a["type"] ~ /[*+-]/ ? "<ul>\n" :
 		 a["start"] ~ /^0*1$/ ? "<ol>\n" :
 		 "<ol start=\"" a["start"] "\">\n")
-      open_block(stack, result, "item", "<li>")
+      open_block(stack, result,
+	"item " a["indent"] " " a["type"] " " a["start"], "<li>")
       open_block(stack, result, "placeholder", "")
       add_line_to_tree(stack, level + 2, a["content"], curblock, result)
     } else if (h == "paragraph") {
@@ -285,7 +519,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
       add_line_to_tree(stack, level, a["content"], curblock, result)
     } else if (h == "fenced-code") {
       open_block(stack, result, h " " a["indent"] " " a["type"],
-	"<pre" (a["class"] ? " class=\"" a["class"] "\"" : "") "><code>")
+	"<pre><code" (a["class"] ? " class=\"" a["class"] "\"" : "") ">")
     } else {
       assert(0, "Unhandled line type " h " in add_line_to_tree")
     }
@@ -307,7 +541,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
       if (h == "indented-code" || h == "paragraph") {
 	# The line can be added to the current block as text. Remove
 	# leading spaces.
-	push(curblock, awk::gensub(/^\s*/, "", 1, line))
+	push(curblock, awk::gensub(/^\s+/, "", 1, line))
       } else {
 	# The line indicates the start of a new block. Close the
 	# paragraph and call self recursively to add that new block to
@@ -359,44 +593,44 @@ function add_line_to_tree(stack, level, line, curblock, result,
       }
       break
     case "list":
+      # Use the indent of the most recent item, rather than of the
+      # first. The following should set curtype[1] to "item" and
+      # curtype[2] to the indent of the item.
+      split(item(stack, level + 1), curtype)
       if (h == "blank-line") {
 	# A blank line does not end a list, but it may end one of its
 	# descendants. Pass it on.
 	add_line_to_tree(stack, level + 1, a["content"], curblock, result)
       } else if (indent_size(line) >= curtype[2]) {
-	# The line is indented at least to the same level as the first
-	# line of the first item of this list, which means it does not
-	# end this list. Reduce the indent of the line and pass it on
-	# to be handled by the current list item and its children.
+	# The line is indented at least to the same level as the
+	# current item of this list, which means it does not end this
+	# item. Reduce the indent of the line and pass it on to be
+	# handled by the current list item and its children.
+	# print "line = \"" line "\"" > "/dev/stderr"
+	# print "  indent = " indent_size(line) > "/dev/stderr"
+	# print "  stack = \"" item(stack, level + 1) "\"" > "/dev/stderr"
+	# print "  curtype[2] = " curtype[2] > "/dev/stderr"
 	add_line_to_tree(stack, level + 1, unindent_line(line, curtype[2]),
 			 curblock, result)
+      } else if (h == "list" && a["type"] == curtype[3]) {
+	# The line is a list item of the same type as the current
+	# list. Close the current item and open a new one.
+	close_blocks(stack, level + 1, curblock, result)
+	open_block(stack, result,
+	  "item " a["indent"] " " a["type"] " " a["start"], "<li>")
+	open_block(stack, result, "placeholder", "")
+	add_line_to_tree(stack, level + 2, a["content"], curblock, result)
+      } else if ((h == "paragraph" || h == "indented-code") &&
+		 top(stack) == "paragraph") {
+	# There is currently a paragraph open and the line is
+	# compatible with being a lazy continuation line. Pass it on
+	# to that paragraph.
+	add_line_to_tree(stack, size(stack), line, curblock, result)
       } else {
-	# The indent of the line is not enough to be sure that it is part
-	# of the current list item of this list. Remove whatever
-	# indentation it has and see what kind of line it is.
-	f = unindent_line(line, curtype[2])
-	h = type_of_line(f, a)
-	if (h == "list" && a["type"] == curtype[3]) {
-	  # The line indicates a list item of the same type as the
-	  # current list. So close the current list item and add a new
-	  # one. Then call self recursively to add the contents of the
-	  # line (after the list marker) to the newly created item.
-	  close_blocks(stack, level + 1, curblock, result)
-	  open_block(stack, result, "item", "<li>")
-	  open_block(stack, result, "placeholder", "")
-	  add_line_to_tree(stack, level + 2, a["content"], curblock, result)
-	} else if (h == "paragraph" && top(stack) == "paragraph") {
-	  # There is currently a paragraph open and the line (without
-	  # indentation) is a valid paragraph line. So the line is a
-	  # lazy continuation line. Pass it on to that paragraph.
-	  add_line_to_tree(stack, size(stack), f, curblock, result)
-	} else {
-	  # The line is of any other kind, so close the current list
-	  # and call self recursively to create a new block for this
-	  # line.
-	  close_blocks(stack, level, curblock, result)
-	  add_line_to_tree(stack, level, line, curblock, result)
-	}
+	# The line is of any other kind, so close the current list and
+	# call self recursively to create a new block for this line.
+	close_blocks(stack, level, curblock, result)
+	add_line_to_tree(stack, level, line, curblock, result)
       }
       break
     case "item":
@@ -405,10 +639,11 @@ function add_line_to_tree(stack, level, line, curblock, result,
       add_line_to_tree(stack, level + 1, line, curblock, result)
       break
     case "fenced-code":
-      if (h == "fenced-code" && a["type"] ~ curtype[3])
+      if (h == "fenced-code" && a["type"] ~ curtype[3] && a["info"] == "")
 	# The line is a fenced code marker (``` or ~~~) of the same
 	# type and at least as long as the marker that started the
-	# fenced code block. So this is the end of the block.
+	# fenced code block. And it does not have an info string. So
+	# this is the end of the block.
 	close_blocks(stack, level, curblock, result)
       else
 	# Any other line is added verbatim to this block, except that
@@ -469,7 +704,7 @@ function type_of_line(line, parts,	a, h)
   } else if (indent_size(line) >= 4) {
     parts["content"] = unindent_line(line, 4)
     return "indented-code"
-  } else if (match(line, /^\s*((```+)([^`].*)?|(~~~+)([^~].*)?)$/, a)) {
+  } else if (match(line, /^\s*((```+)([^`]*)|(~~~+)(.*))$/, a)) {
     parts["type"] = a[2] a[4]
     parts["info"] = awk::gensub(/^\s+/,"",1,awk::gensub(/\s+$/, "",1,a[3] a[5]))
     parts["class"] = parts["info"] ?
@@ -481,21 +716,28 @@ function type_of_line(line, parts,	a, h)
     return "blockquote"
   } else if (match(line, /^\s*((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/)) {
     return "thematic-break"
-  } else if (match(line, /^\s*([*+-])(\s(.*))?$/, a)) {
-    parts["content"] = a[3]
-    parts["type"] = a[1]
-    parts["indent"] = indent_size(awk::gensub(/[*+-]/, " ", 1, line))
+  } else if (match(line, /^(\s*)([*+-])(\s(.*[^[:space:]].*))?$/, a)) {
+    parts["content"] = 4 in a ? a[4] : ""
+    parts["type"] = a[2]
+    if (indent_size(parts["content"]) >= 4) # Starts with indented code block
+      parts["indent"] = indent_size(a[1]) + 2
+    else
+      parts["indent"] = indent_size(a[1] " " a[3])
     return "list"
-  } else if (match(line, /^\s*([0-9]{1,9})[.\)](.*)$/, a)) {
-    parts["content"] = a[2]
-    parts["start"] = a[1]
+  } else if (match(line, /^(\s*)([0-9]{1,9})[.\)](\s(.*[^[:space:]].*))?$/, a)) {
+    parts["content"] = 4 in a ? a[4] : ""
+    parts["start"] = a[2]
     parts["type"] = "1"
-    h = awk::gensub(/./, " ", "g", a[1])
-    parts["indent"] = indent_size(awk::gensub(/[0-9]+[.\)]/, h " ", 1, line))
+    h = awk::gensub(/./, " ", "g", a[2])
+    if (indent_size(parts["content"]) >= 4) # Starts with indented code block
+      parts["indent"] = indent_size(a[1] h " ") + 1
+    else
+      parts["indent"] = indent_size(a[1] h " " a[3])
     return "list"
   } else if (match(line, /^\s*(#{1,6})(\s+(.*))?$/, a)) {
-    parts["content"] = a[3]
+    parts["content"] = 3 in a ? a[3] : ""
     parts["level"] = length(a[1])
+    sub(/(^|\s)+#+\s*$/, "", parts["content"]) # Remove any #'s at the end
     return "heading"
   } else if (match(line, /^\s*(.*)$/, a)) {
     parts["content"] = a[1]
@@ -544,7 +786,7 @@ function open_block(stack, result, type, tag)
 
 
 # close_blocks -- serialize a block and its children into result and remove them
-function close_blocks(stack, level, curblock, result,	curtype)
+function close_blocks(stack, level, curblock, result,	curtype, h)
 {
   # A recursive function that serializes the block at the given level,
   # and all blocks contained within it, to HTML. It adds the HTML to
@@ -568,7 +810,8 @@ function close_blocks(stack, level, curblock, result,	curtype)
     case "placeholder":		# Newly opened blockquote or item
       break;
     case "paragraph":
-      push(result, to_inline_html(join(curblock, "\n")))
+      push(result, awk::gensub(/ +$/, "", 1,
+	to_inline_html(join(curblock, "\n"))))
       destroy(curblock)
       push(result, "</p>\n")
       break
@@ -577,7 +820,8 @@ function close_blocks(stack, level, curblock, result,	curtype)
       push(result, "</blockquote>\n")
       break
     case "heading":
-      push(result, to_inline_html(join(curblock, "\n")))
+      push(result, awk::gensub(/ +$/, "", 1,
+	to_inline_html(join(curblock, "\n"))))
       destroy(curblock)
       push(result, "</h" curtype[2] ">\n")
       break
@@ -590,16 +834,19 @@ function close_blocks(stack, level, curblock, result,	curtype)
       push(result, "</li>\n")
       break
     case "indented-code":
-      push(result, esc_html(join(curblock, "\n")))
+      h = join(curblock, "\n")
+      sub(/\n+$/, "", h)	# Empty lines before the end are removed
+      if (h != "") push(result, esc_html(h) "\n")
       destroy(curblock)
-      push(result, "\n</code></pre>\n")
+      push(result, "</code></pre>\n")
       break
     case "thematic-break":
       break
     case "fenced-code":
-      push(result, esc_html(join(curblock, "\n")))
+      h = join(curblock, "\n")
+      if (h != "") push(result, esc_html(h) "\n")
       destroy(curblock)
-      push(result, "\n</code></pre>\n")
+      push(result, "</code></pre>\n")
       break
     default:
       assert(0, "Unhandled block type: " curtype[1] " in close_blocks()")
@@ -640,6 +887,16 @@ function esc_html(s)
   gsub(/</, "\\&lt;", s)
   gsub(/>/, "\\&gt;", s)
   gsub(/"/, "\\&quot;", s)
+  return s
+}
+
+
+# esc_url -- %-escape certain characters for use in a URL
+function esc_url(s)
+{
+  gsub(/\\/, "%5C", s)
+  gsub(/\[/, "%5B", s)		# Not necessary, but matches the spec examples
+  gsub(/\]/, "%5D", s)		# Not necessary, but matches the spec examples
   return s
 }
 
