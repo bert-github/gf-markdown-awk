@@ -1,5 +1,6 @@
 :
 # https://github.github.com/gfm/#example-258
+# Modified: Newline after <li>.
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
@@ -14,7 +15,8 @@ EOF
 
 cat >$EXPECT <<EOF
 <ul>
-<li></li>
+<li>
+</li>
 </ul>
 <p>foo</p>
 EOF

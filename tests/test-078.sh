@@ -1,6 +1,5 @@
 :
 # https://github.github.com/gfm/#example-78
-# Modified: No line break between <li> and <p>
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
@@ -15,7 +14,8 @@ EOF
 
 cat >$EXPECT <<EOF
 <ul>
-<li><p>foo</p>
+<li>
+<p>foo</p>
 <p>bar</p>
 </li>
 </ul>

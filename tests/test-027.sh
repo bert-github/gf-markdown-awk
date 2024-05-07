@@ -16,12 +16,14 @@ EOF
 
 cat >$EXPECT <<EOF
 <ul>
-<li><p>foo</p>
+<li>
+<p>foo</p>
 </li>
 </ul>
 <hr />
 <ul>
-<li><p>bar</p>
+<li>
+<p>bar</p>
 </li>
 </ul>
 EOF

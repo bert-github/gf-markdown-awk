@@ -1,5 +1,6 @@
 :
 # https://github.github.com/gfm/#example-273
+# Modified: Enclosed list item text in <p>.
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
@@ -15,10 +16,18 @@ EOF
 
 cat >$EXPECT <<EOF
 <ul>
-<li>foo</li>
-<li>bar</li>
-<li>baz</li>
-<li>boo</li>
+<li>
+<p>foo</p>
+</li>
+<li>
+<p>bar</p>
+</li>
+<li>
+<p>baz</p>
+</li>
+<li>
+<p>boo</p>
+</li>
 </ul>
 EOF
 

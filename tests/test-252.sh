@@ -16,7 +16,8 @@ EOF
 
 cat >$EXPECT <<EOF
 <ol>
-<li><pre><code> indented code
+<li>
+<pre><code> indented code
 </code></pre>
 <p>paragraph</p>
 <pre><code>more code

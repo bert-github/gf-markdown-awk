@@ -1,5 +1,6 @@
 :
 # https://github.github.com/gfm/#example-2
+# Modified: tabs expanded to spaces.
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`

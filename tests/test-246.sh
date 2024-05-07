@@ -12,7 +12,9 @@ EOF
 
 cat >$EXPECT <<EOF
 <ol start="3">
-<li>ok</li>
+<li>
+<p>ok</p>
+</li>
 </ol>
 EOF
 

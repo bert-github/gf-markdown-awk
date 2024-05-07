@@ -13,8 +13,10 @@ EOF
 
 cat >$EXPECT <<EOF
 <ol>
-<li>A paragraph
-with two lines.</li>
+<li>
+<p>A paragraph
+with two lines.</p>
+</li>
 </ol>
 EOF
 

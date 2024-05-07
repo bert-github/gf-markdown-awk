@@ -14,7 +14,8 @@ EOF
 
 cat >$EXPECT <<EOF
 <ul>
-<li><p>foo</p>
+<li>
+<p>foo</p>
 <pre><code>  bar
 </code></pre>
 </li>

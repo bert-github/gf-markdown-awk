@@ -1,6 +1,8 @@
 :
 # https://github.github.com/gfm/#example-179
 
+exit 2				# Not applicable
+
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
 EXPECT=`mktemp /tmp/test-XXXXXX`
