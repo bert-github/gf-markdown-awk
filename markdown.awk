@@ -251,6 +251,10 @@ function inline_autolink(s, i, no_links, replacements, result,
   # Check that the "<" is not escaped with a backslash.
   if (is_escaped(s, i)) return 0
 
+  # Check that we're not after a "](", because then we're inside the
+  # destination of a link.
+  if (substr(s, 1, i - 1) ~ /\]\(\s*$/) return 0
+
   # print "inline_autolink(\"" s "\", " i ")" > "/dev/stderr"
 
   # Set s to the text to parse.
@@ -288,6 +292,10 @@ function inline_html_tag(s, i, replacements, result,
   # Check that the "<" is not escaped with a backslash.
   if (is_escaped(s, i)) return 0
 
+  # Check that we're not after a "](", because then we're inside the
+  # destination of a link.
+  if (substr(s, 1, i - 1) ~ /\]\(\s*$/) return 0
+
   # print "inline_html_tag(\"" s "\",...)" > "/dev/stderr"
 
   # Set s to the text to parse.
@@ -313,7 +321,7 @@ function inline_html_tag(s, i, replacements, result,
 
 
 function inline_link_or_image(s, i, no_links, replacements, result,
-			      x, t, u, n, j, is_image)
+			      x, t, u, n, j, is_image, url, title)
 {
   # print "inline_link_or_image(\"" s "\", " i ", " no_links ",...)" > "/dev/stderr"
 
@@ -329,37 +337,57 @@ function inline_link_or_image(s, i, no_links, replacements, result,
   else return 0
 
   # Collect in t all the text between the initial "[" and the matching
-  # "]" (the anchor text), while allowing matching bracket pairs to
-  # occur between the two. Set s to the string starting with the
-  # matching "]".
+  # "]" (the anchor text), while allowing matching bracket pairs and
+  # backslash-escaped brackets to occur between the two. Set s to the
+  # string starting with the matching "]".
   t = ""
   n = 0
-  while ((j = match(s, /[][]/, x))) {
-    if (x[0] == "[") {
-      n++
-      t = t substr(s, 1, j)
-      s = substr(s, j + 1)
+  while ((j = match(s, /[][]/, x)))
+    if ((x[0] == "[" || x[0] == "]") && is_escaped(s, j)) {
+      t = t substr(s, 1, j); s = substr(s, j + 1)
+    } else if (x[0] == "[") {
+      n++; t = t substr(s, 1, j); s = substr(s, j + 1)
     } else if (n != 0) {
-      n--
-      t = t substr(s, 1, j)
-      s = substr(s, j + 1)
+      n--; t = t substr(s, 1, j); s = substr(s, j + 1)
     } else {
-      t = t substr(s, 1, j - 1)
-      s = substr(s, j)
-      break
+      t = t substr(s, 1, j - 1); s = substr(s, j); break
     }
-  }
-  # print "anchor = \"" t "\"" > "/dev/stderr"
+  # print "anchor = \"" t "\" rest=\"" s "\"" > "/dev/stderr"
 
-  # If s does not start with "](...)", this is not a link.
-  if (! match(s, /^\]\(\s*(<([^>]*)>|([^\)[:space:]]*))(\s+"([^"]*)"|\s+'([^']*)'|\s+\(([^\)]*)\))?\s*\)(.*)/, x))
-    #                     1 2     2  3               314    5     5      6     6       7      7  4      8  8
+  # If s does not start with "](", this is not a link.
+  if (! match(s, /^\]\(\s*/, x)) return 0
+  s = substr(s, length(x[0]) + 1)
+
+  # Get the URL: <...> or balanced text.
+  if (match(s, /^<(([^<>\n]|\\[<>])*)>/, x)) { # URL between <...>
+    url = x[1]
+    s = substr(s, length(x[0]) + 1)
+  } else if (s ~ /^</) {	# Must not start with "<"
     return 0
+  } else {
+    url = ""
+    n = 0
+    while ((j = match(s, /[()\000- ]/, x)))
+      if ((x[0] == "(" || x[0] == ")") && is_escaped(s, j)) {
+	url = url substr(s, 1, j); s = substr(s, j + 1)
+      } else if (x[0] == "(") {
+	n++; url = url substr(s, 1, j); s = substr(s, j + 1)
+      } else if (x[0] != ")") {
+	url = url substr(s, 1, j - 1); s = substr(s, j); break
+      } else if (n != 0) {	# balanced ")"
+	n--; url = url substr(s, 1, j); s = substr(s, j + 1)
+      } else {			# unbalanced ")"
+	url = url substr(s, 1, j - 1); s = substr(s, j); break
+      }
+  }
+  print "Found URL: \"" url "\" rest=\"" s "\"" > "/dev/stderr"
 
-  # TODO: Allow balanced () pairs inside the outer (), just like
-  # balanced [] are allowed inside the anchor text above.
-
-  # print "Found URL: \"" x[2] x[3] "\"" > "/dev/stderr"
+  # Get the optional title and the final ")".
+  if (! match(s, /^([ \t\n\v\f\r]+"(([^"]|\\")*)"|[ \t\n\v\f\r]+'(([^']|\\')*)'|[ \t\n\v\f\r]+\((([^\)]|\\[()])*)\))?[ \t\n\v\f\r]*\)/, x)) return 0
+  #                1               23        3 2                 45        5 4                  67            7 6  1
+  title = x[2] x[4] x[6]
+  s = substr(s, length(x[0]) + 1)
+  print "Found title: \"" title "\" rest=\"" s "\"" > "/dev/stderr"
 
   # Convert the anchor text t to HTML. The 1 indicates that no links
   # are allowed in that text.
@@ -367,15 +395,15 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 
   # Create the HTML code for the link or image.
   if (is_image) {
-    u = "<img src=\"" esc_html(esc_url(unesc_md(x[2] x[3]))) "\""	\
+    u = "<img src=\"" esc_html(esc_url(unesc_md(url))) "\""	\
       " alt=\"" esc_html(to_text(t)) "\""
-    if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
+    if (title) u = u " title=\"" esc_html(unesc_md(title)) "\""
     u = u " />"
   } else if (no_links) {	     # Nested links not allowed, use text only
     u = t
   } else {
-    u = "<a href=\"" esc_html(esc_url(unesc_md(x[2] x[3]))) "\""
-    if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
+    u = "<a href=\"" esc_html(esc_url(unesc_md(url))) "\""
+    if (title) u = u " title=\"" esc_html(unesc_md(title)) "\""
     u = u ">" t "</a>"
   }
 
@@ -383,7 +411,7 @@ function inline_link_or_image(s, i, no_links, replacements, result,
   # "<n>".
   push(replacements, u)
   result["html"] = "\002" size(replacements) "\003"
-  result["rest"] = x[8]
+  result["rest"] = s
   return 1
 }
 
@@ -416,6 +444,9 @@ function inline_emphasis(s, i, no_links, replacements, result,
       # print "x[1]=\"" x[1] " x[2]=\"" x[2] "\"" > "/dev/stderr"
 
       # Find a potential closing delimiter.
+      # TODO: Apply rule 10 which says that "*foo**bar*" is
+      # "<em>foo**bar</em>" rather than "is "<em>foo</em<em>bar</em>".
+      # (https://github.github.com/gfm/#emphasis-and-strong-emphasis)
       u = x[2]
       j = 1
       while (1) {
@@ -424,7 +455,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	# print "found a * at j=" j ", len=" len ", is_right_flanking->" is_right_flanking(x[2], j, len) " is_escaped->" is_escaped(x[2], j) > "/dev/stderr"
 	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
 	else if (is_right_flanking(x[2], j, len)) break
-	else { j += len; u = substr(x[2], j) }	# Try again just after the failed match
+	else { j += len; u = substr(x[2], j) }	# Try again after the match
       }
 
       # If we found no closing delimiter, stop the loop.
@@ -440,19 +471,21 @@ function inline_emphasis(s, i, no_links, replacements, result,
       u = x[2]
       j = 1
       while (1) {
-	if (! match(u, /\*/)) { j = 0; break }
+	if (! match(u, /\*+/)) { j = 0; break }
 	j += RSTART - 1; len = RLENGTH
-	if (j >= closing) break
+	if (j >= closing) { j = 0; break }
 	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
 	else if (inline_emphasis(x[2], j, no_links, replacements, result1)) break
 	else { j += len; u = substr(x[2], j) }	# Try again just after the failed match
       }
       # print "j=" j > "/dev/stderr"
 
-      if (j != 0 && j < closing) {
+      if (j != 0) {
 	# We found and processed an opening delimiter. Replace the
 	# processed part in the string s by the result of processing.
-	result["html"] = x[1] substr(x[2], 1, j - 1) result1["html"]
+	push(replacements, result1["html"])
+	t = "\002" size(replacements) "\003"
+	result["html"] = x[1] substr(x[2], 1, j - 1) t
 	result["rest"] = result1["rest"]
 	s = result["html"] result["rest"]
 	match(s, /^(\*+)(.*)/, x)
@@ -470,7 +503,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	# Enclose the replacement in <strong> and/or <em>, depending
 	# on how many *'s were matched (= n).
 	n = min(length(x[1]), closinglen)
-	if (n > 1) {
+	for (j = n; j > 1; j -= 2) {
 	  push(replacements, "<strong>")
 	  t = "\002" size(replacements) "\003" t
 	  push(replacements, "</strong>")
@@ -517,6 +550,9 @@ function inline_emphasis(s, i, no_links, replacements, result,
       # print "x[1]=\"" x[1] " x[2]=\"" x[2] "\"" > "/dev/stderr"
 
       # Find a potential closing delimiter.
+      # TODO: Apply rule 10 which says that "*foo**bar*" is
+      # "<em>foo**bar</em>" rather than "is "<em>foo</em<em>bar</em>".
+      # (https://github.github.com/gfm/#emphasis-and-strong-emphasis)
       u = x[2]
       j = 1
       while (1) {
@@ -524,7 +560,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	j += RSTART - 1; len = RLENGTH
       	# print "found a _ at j=" j ", len=" len ", is_right_flanking_plus = " is_right_flanking_plus(x[2], j, len) > "/dev/stderr"
 	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
-	else if (is_right_flanking_plus(x[2], j, len)) break;
+	else if (is_right_flanking_plus(x[2], j, len)) break
 	else { j += len; u = substr(x[2], j) }	# Try again after the match
       }
 
@@ -543,17 +579,19 @@ function inline_emphasis(s, i, no_links, replacements, result,
       while (1) {
 	if (! match(u, /_+/)) { j = 0; break }
 	j += RSTART - 1; len = RLENGTH
-	if (j >= closing) break
+	if (j >= closing) { j = 0; break }
 	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
 	else if (inline_emphasis(x[2], j, no_links, replacements, result1)) break
 	else { j += len; u = substr(x[2], j) }	# Try again after the match
       }
       # print "j=" j > "/dev/stderr"
 
-      if (j != 0 && j < closing) {
+      if (j != 0) {
 	# We found and processed an opening delimiter. Replace the
 	# processed part in the string s by the result of processing.
-	result["html"] = x[1] substr(x[2], 1, j - 1) result1["html"]
+	push(replacements, result1["html"])
+	t = "\002" size(replacements) "\003"
+	result["html"] = x[1] substr(x[2], 1, j - 1) t
 	result["rest"] = result1["rest"]
 	s = result["html"] result["rest"]
 	match(s, /^(_+)(.*)/, x)
@@ -571,7 +609,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	# Enclose the replacements in <strong> and/or <em>, depending
 	# on how many _'s were matched (= n).
 	n = min(length(x[1]), closinglen)
-	if (n > 1) {
+	for (j = n; j > 1; j -= 2) {
 	  push(replacements, "<strong>")
 	  t = "\002" size(replacements) "\003" t
 	  push(replacements, "</strong>")
@@ -1361,9 +1399,12 @@ function esc_html(s)
 function esc_url(s)
 {
   gsub(/\\/, "%5C", s)
-  gsub(/\[/, "%5B", s)		# Not necessary, but matches the spec examples
-  gsub(/\]/, "%5D", s)		# Not necessary, but matches the spec examples
-  gsub(/`/, "%60", s)		# Not necessary, but matches the spec examples
+  gsub(/ /, "%20", s)
+  # gsub(/\[/, "%5B", s)	# Not necessary, but matches the spec examples
+  # gsub(/\]/, "%5D", s)	# Not necessary, but matches the spec examples
+  # gsub(/`/, "%60", s)		# Not necessary, but matches the spec examples
+  gsub(/"/, "%22", s)		# Not necessary, but matches the spec examples
+  gsub(/ /, "%C2%A0", s)	# Not necessary, but matches the spec examples
   return s
 }
 
