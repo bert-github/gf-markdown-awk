@@ -30,11 +30,11 @@ The code does not currently implement extended autolinks (bare URLs, email addre
 
 The code does not currently implement the task list extension, i.e., `[x]` is not transformed into a checkbox.
 
-HTML blocks are not currently handled, which means, e.g., that occurrences of HTML elements `<pre>`, `<script>` and `<style>`, HTML comments, CDATA sections and processing instructions are often not handled correctly when they span multiple lines.
-
 The tables extension is not implemented.
 
 Link reference definitions are not supported.
+
+The code does not fully implement the Disallowed Raw HTML extension: Tags like `<xmp>`, `<iframe>` and `<noembed>` are only filtered when they occur inline, but currently not when they occur in an HTML block.
 
 ## Differences from the specification
 
@@ -52,9 +52,14 @@ When encountering disallowed tags (`<title>`, `<textarea>`, `<style>` and others
 
 The specification does not allows backslashes to occur in HTML tags, except just before a newline. The implementation doesn't allow them before a newline either.
 
-### Whitespace between tags
-
-This implementation outputs `<li><p>` on one line, while the examples in the specification put a newline between the tags.
-
 ## Bugs
-Probably.
+
+Two empty lines at the start of a list item should end the item (i.e., create an empty item), but don't. E.g.,
+
+``` markdown
+-
+
+  Foo
+```
+
+should create an empty list item and a paragraph, but instead creates a list item with the ‘Foo’ inside. (Workaround: Reduce the indent of the text.)
