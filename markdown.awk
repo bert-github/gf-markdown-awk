@@ -126,8 +126,18 @@ function to_inline_html(s,		t, n, i, x, replacements)
 }
 
 
+# inline -- parse inline markdown and return HTML code
 function inline(s, no_links, replacements,		result, t, i, x)
 {
+  # no_links: if 1, links (<a> elements) are not allowed and will be
+  # converted to text.
+  #
+  # replacements: an array of HTML fragments. When markdown is being
+  # replaced by HTML code, the HTML code is stored in this array and a
+  # marker is put in the markdown text. The to_inline_html() function
+  # will eventually replace each marker by the HTML code it refers to,
+  # to construct the final HTML text.
+
   # Replace occurrences in s of code spans (`...`), autolinks (<url>)
   # and HTML tags (elements, comments, CDATA sections, processing
   # instructions) by "<n>" tags.
@@ -211,9 +221,24 @@ function inline(s, no_links, replacements,		result, t, i, x)
 }
 
 
+# inline_code_span -- try to parse markdown starting at i in s as code span (`...`)
 function inline_code_span(s, i, replacements, result,
 			  x, j, content, n, t)
 {
+  # s: the markdown string to parse.
+  #
+  # i: the index in s where to start parsing.
+  #
+  # replacements: a stack to hold generared HTML code fragments
+  # (passed by reference).
+  #
+  # result: an array with two entries, result["html"] and
+  # result["rest"], in which the function returns, respectively, the
+  # result of parsing the code span and the rest of the text of s
+  # after the parsed code span.
+  #
+  # Returns 1 for success, 0 for failure.
+
   # print "inline_code_span(\"" s "\", " i ")" > "/dev/stderr"
 
   # Check that the first "`" is not escaped with a backslash.
@@ -245,9 +270,25 @@ function inline_code_span(s, i, replacements, result,
 }
 
 
+# inline_autolink -- try to parse text starting at i in s as an autolink
 function inline_autolink(s, i, no_links, replacements, result,
 			 x, t, n)
 {
+  # s: the markdown text to parse
+  #
+  # i: where in s to start parsing
+  #
+  # no_links: whether links should be rendered as text rather than <a>
+  # elements.
+  #
+  # replacements: a stack of HTML fragments. (Passed by reference.)
+  #
+  # result: an array in which the function returns the result of
+  # parsing the autolink and the remaining text of s after the
+  # autolink.
+  #
+  # Returns 1 for success, 0 for failure.
+
   # Check that the "<" is not escaped with a backslash.
   if (is_escaped(s, i)) return 0
 
@@ -286,9 +327,22 @@ function inline_autolink(s, i, no_links, replacements, result,
 }
 
 
+# inline_html_tag -- try to parse text at index i in s as an HTML tag
 function inline_html_tag(s, i, replacements, result,
 			 x, t, n)
 {
+  # s: the markdown text to parse.
+  #
+  # i: where in s to start parsing.
+  #
+  # replacements: a stack of HTML fragments. (Passed by reference.)
+  #
+  # result: an array in which the function returns the result of
+  # parsing the HTML tag and the remaining text of s after the
+  # tag.
+  #
+  # Returns 1 for success, 0 for failure.
+
   # Check that the "<" is not escaped with a backslash.
   if (is_escaped(s, i)) return 0
 
@@ -320,9 +374,25 @@ function inline_html_tag(s, i, replacements, result,
 }
 
 
+#  inline_link_or_image -- try to parse text at index i in s as a link or image
 function inline_link_or_image(s, i, no_links, replacements, result,
 			      x, t, u, n, j, is_image, url, title)
 {
+  # s: the markdown text to parse.
+  #
+  # i: where in s to start parsing.
+  #
+  # no_links: whether links should be rendered as text rather than <a>
+  # elements.
+  #
+  # replacements: a stack of HTML fragments. (Passed by reference.)
+  #
+  # result: an array in which the function returns the result of
+  # parsing the link and the remaining text of s after the
+  # autolink.
+  #
+  # Returns 1 for success, 0 for failure.
+
   # print "inline_link_or_image(\"" s "\", " i ", " no_links ",...)" > "/dev/stderr"
 
   # Check that the "<" is not escaped with a backslash.
@@ -380,14 +450,14 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 	url = url substr(s, 1, j - 1); s = substr(s, j); break
       }
   }
-  print "Found URL: \"" url "\" rest=\"" s "\"" > "/dev/stderr"
+  # print "Found URL: \"" url "\" rest=\"" s "\"" > "/dev/stderr"
 
   # Get the optional title and the final ")".
   if (! match(s, /^([ \t\n\v\f\r]+"(([^"]|\\")*)"|[ \t\n\v\f\r]+'(([^']|\\')*)'|[ \t\n\v\f\r]+\((([^\)]|\\[()])*)\))?[ \t\n\v\f\r]*\)/, x)) return 0
   #                1               23        3 2                 45        5 4                  67            7 6  1
   title = x[2] x[4] x[6]
   s = substr(s, length(x[0]) + 1)
-  print "Found title: \"" title "\" rest=\"" s "\"" > "/dev/stderr"
+  # print "Found title: \"" title "\" rest=\"" s "\"" > "/dev/stderr"
 
   # Convert the anchor text t to HTML. The 1 indicates that no links
   # are allowed in that text.
@@ -416,9 +486,25 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 }
 
 
+# inline_emphasis -- try to parse text at index i in s as emphasis
 function inline_emphasis(s, i, no_links, replacements, result,
 			 x, t, u, j, closing, closinglen, len)
 {
+  # s: the markdown text to parse.
+  #
+  # i: where in s to start parsing.
+  #
+  # no_links: whether nested links should be rendered as text rather
+  # than <a> elements.
+  #
+  # replacements: a stack of HTML fragments. (Passed by reference.)
+  #
+  # result: an array in which the function returns the result of
+  # parsing the emphasis span and the remaining text of s after the
+  # span.
+  #
+  # Returns 1 for success, 0 for failure.
+
   assert(substr(s, i, 1) ~ /[*_]/, "substr(s, i, 1) ~ /[*_]/")
 
   # print "inline_emphasis(\"" s "\", " i ",...)" > "/dev/stderr"
@@ -476,7 +562,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	if (j >= closing) { j = 0; break }
 	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
 	else if (inline_emphasis(x[2], j, no_links, replacements, result1)) break
-	else { j += len; u = substr(x[2], j) }	# Try again just after the failed match
+	else { j += len; u = substr(x[2], j) }	# Try again after the match
       }
       # print "j=" j > "/dev/stderr"
 
@@ -606,7 +692,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 	t = inline(substr(x[2], 1, closing - 1), no_links, replacements)
 	# print "processed \"" substr(x[2], 1, closing - 1) "\" -> \"" t "\"" > "/dev/stderr"
 
-	# Enclose the replacements in <strong> and/or <em>, depending
+	# Enclose the replacement in <strong> and/or <em>, depending
 	# on how many _'s were matched (= n).
 	n = min(length(x[1]), closinglen)
 	for (j = n; j > 1; j -= 2) {
@@ -641,9 +727,24 @@ function inline_emphasis(s, i, no_links, replacements, result,
 }
 
 
+# inline_strikethrough -- try to parse text at index i in s as deletion (~...~)
 function inline_strikethrough(s, i, no_links, replacements, result,
 			      x, j, t)
 {
+  # s: the markdown text to parse.
+  #
+  # i: where in s to start parsing.
+  #
+  # no_links: whether nested links should be rendered as text rather
+  # than <a> elements.
+  #
+  # replacements: a stack of HTML fragments. (Passed by reference.)
+  #
+  # result: an array in which the function returns the result of
+  # parsing the span and the remaining text of s after the span.
+  #
+  # Returns 1 for success, 0 for failure.
+
   assert(substr(s, i, 1) == "~", "substr(s, i, 1) == \"~\"")
 
   # Check that there is no uneven number of backslashes before the ~
@@ -706,11 +807,13 @@ function is_left_flanking(s, i, len,	before, after, r)
 }
 
 
+# is_left_flanking_plus -- check if the delimiters at i in s can start emphasis
 function is_left_flanking_plus(s, i, len,		r)
 {
   # Part of a left-flanking delimiter run and either (a) not part of a
   # right-flanking delimiter run or (b) part of a right-flanking
   # delimiter run preceded by punctuation.
+  #
   r = is_left_flanking(s, i, len) &&
     (! is_right_flanking(s, i, len) || substr(s, 1, i - 1) ~ /[[:punct:]]$/)
   # print "is_left_flanking_plus(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
@@ -741,8 +844,14 @@ function is_right_flanking(s, i, len,		before, after, r)
 }
 
 
+# is_right_flanking_plus -- check if the delimiters at i in s can end emphasis
 function is_right_flanking_plus(s, i, len,	r)
 {
+  # Check if the delimiter run at index i in s is part of a
+  # right-flanking delimiter run and either (a) not part of a
+  # left-flanking delimiter run or (b) part of a left-flanking
+  # delimiter run followed by punctuation.
+  #
   r = is_right_flanking(s, i, len) &&
     (! is_left_flanking(s, i, len) || substr(s, i + len) ~ /^[[:punct:]]/)
   # print "is_right_flanking_plus(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
