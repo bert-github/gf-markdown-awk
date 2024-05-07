@@ -62,4 +62,11 @@ Two empty lines at the start of a list item should end the item (i.e., create an
   Foo
 ```
 
-should create an empty list item and a paragraph, but instead creates a list item with the ‘Foo’ inside. (Workaround: Reduce the indent of the text.)
+should create an empty list item and a paragraph, but instead creates a list item with the ‘Foo’ inside. (Workaround: Reduce the indent of `Foo’.)
+
+‘Rule 10’ is not implemented. It says that `*foo**bar*` should be `<em>foo**bar</em>`, but the current implementation produces `<em>foo</em<em>bar</em>` instead.
+
+When two potential emphasis spans overlap, it is not always the first that takes precedence. (Violates ‘rule 15’.)
+
+It is possible to create a nested link by putting an autolink inside another link: `[a link <http://example.org/path1> inside anchor text](http://example.org/path2)`. (The cmark and cmark-gfm implementations do this, too.)
+
