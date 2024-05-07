@@ -128,73 +128,80 @@ function to_inline_html(s,		t, n, i, x, replacements)
 
 function inline(s, no_links, replacements,		result, t, i, x)
 {
-  # print "inline(\"" s "\", " no_links ",...)" > "/dev/stderr"
-
   # Replace occurrences in s of code spans (`...`), autolinks (<url>)
   # and HTML tags (elements, comments, CDATA sections, processing
-  # instructions) by "<n>" tags and put the corresponding HTML code in
-  # replacements at index n. The "<n>" tags actually consist of \002 +
-  # decimal number + \003.
+  # instructions) by "<n>" tags.
+  #
+  # Put the corresponding HTML code in replacements at index n. The
+  # "<n>" tags actually consist of \002 + decimal number + \003.
+  #
+  # t = what we parsed so far, s = the string yet to parse.
+  #
   t = ""
-  while ((i = match(s, /(^|[^\\])(`|<)(.*)/, x)))
-    if (inline_code_span(x[2] x[3], result, replacements) ||
-	inline_autolink(x[2] x[3], no_links, result, replacements) ||
-	inline_html_tag(x[2] x[3], result, replacements)) {
-      t = t substr(s, 1, i - 1) x[1] result["html"]
+  while ((i = match(s, /`+|</, x)))
+    if (is_escaped(s, i)) {	# After a backslash. Skip one character
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
+    } else if (inline_code_span(s, i, replacements, result) ||
+	inline_autolink(s, i, no_links, replacements, result) ||
+	inline_html_tag(s, i, replacements, result)) {
+      t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
-    } else {
-      t = t substr(s, 1, i - 1) x[1] x[2]
-      s = x[3]
+    } else {			# Apparently not a delimiter. Skip it
+      t = t substr(s, 1, i - 1 + length(x[0]))
+      s = substr(s, i + length(x[0]))
     }
   s = t s
-  # print "after \"`\" and \"<\": \"" s "\"" > "/dev/stderr"
 
   # Replace occurences in s of links ("[anchor](url)") or images
-  # ("![alt](url)") by "<n>" tags and put the corresponding HTML code
-  # in replacements.
+  # ("![alt](url)").
+  #
   t = ""
-  while ((i = match(s, /(^|[^\\])(!?\[)(.*)/, x)))
-    if (inline_link_or_image(x[2] x[3], no_links, result, replacements)) {
-      t = t substr(s, 1, i - 1) x[1] result["html"]
-      # print "so far: \"" t "\"" > "/dev/stderr"
+  while ((i = match(s, /!?\[/)))
+    if (inline_link_or_image(s, i, no_links, replacements, result)) {
+      t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
-    } else {
-      t = t substr(s, 1, i - 1) x[1] x[2]
-      s = x[3]
+    } else {			# Apparently not a link, Skip a character.
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
     }
   s = t s
-  # print "after links: \"" s "\"" > "/dev/stderr"
 
-  # Replace occurrences in s of bold (**...**, __...__) or italic
-  # (*...*, _..._) with tags "<n>" and put the corresponding HTML code
-  # in replacements.
+  # Replace occurences of bold and italic emphasis (*...*, **...**,
+  # ***...***, _..._, __...__ or ___...___).
+  #
   t = ""
-  while ((i = match(s, /(^|[^\\])(_+|\*+)([^[:space:][:punct:]].*)|(^|[[:space:][:punct:]])(_+|\*+)([[:punct:]].*)/, x)))
-    if (inline_emphasis(x[2] x[3]  x[5] x[6], no_links, result, replacements)) {
-      t = t substr(s, 1, i - 1) x[1] x[4] result["html"]
+  while ((i = match(s, /\*+|_+/, x)))
+    if (is_escaped(s, i)) {	# After a backslash. Skip one character
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
+    } else if (inline_emphasis(s, i, no_links, replacements, result)) {
+      t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
-    } else {
-      t = t substr(s, 1, i - 1) x[1] x[2]  x[4] x[5]
-      s = x[3] x[6]
+    } else {			# Apparently not an opening delimiter. Skip it
+      t = t substr(s, 1, i - 1 + length(x[0]))
+      s = substr(s, i + length(x[0]))
     }
   s = t s
-  # print "after * and _: \"" s "\"" > "/dev/stderr"
 
-  # Replace occurrences in s of strikethrough (~...~, ~~...~~) with
-  # tags "<n>" and put the corresponding HTML code in replacements.
+  # Replace occurrences in s of strikethrough (~...~, ~~...~~).
+  #
   t = ""
-  while ((i = match(s, /(^|[^~\\])(~~?)([^~].*)/, x)))
-    if (inline_strikethrough(x[2] x[3], result, replacements)) {
-      t = t substr(s, 1, i - 1) x[1] result["html"]
+  while ((i = match(s, /~+/, x)))
+    if (is_escaped(s, i)) {	# After a backslash. Skip one character
+      t = t substr(s, 1, i)
+      s = substr(s, i + 1)
+    } else if (inline_strikethrough(s, i, no_links, replacements, result)) {
+      t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
-    } else {
-      t = t substr(s, 1, i - 1) x[1] x[2]
-      s = x[3]
+    } else {			# Apparently not a valid delimiter. Skip it.
+      t = t substr(s, 1, i - 1 + length(x[0]))
+      s = substr(s, i + length(x[0]))
     }
   s = t s
-  # print "after ~: \"" s "\"" > "/dev/stderr"
 
   # Replace hard line breaks by <br> and remove backslash escapes.
+  #
   push(replacements, "<br />\n")
   t = "\002" size(replacements) "\003"
   s = awk::gensub(/ \n/, "\n", "g",
@@ -204,40 +211,68 @@ function inline(s, no_links, replacements,		result, t, i, x)
 }
 
 
-function inline_code_span(s, result, replacements,	x, content, t, n)
+function inline_code_span(s, i, replacements, result,
+			  x, j, content, n, t)
 {
-  # Check that s starts with a span of "`".
-  if (! match(s, /^(`+)(.*)/, x)) return 0
+  # print "inline_code_span(\"" s "\", " i ")" > "/dev/stderr"
+
+  # Check that the first "`" is not escaped with a backslash.
+  if (is_escaped(s, i)) return 0
+
+  # Check that that text at index i in s starts with a span of "`".
+  if (! match(substr(s, i), /^(`+)(.*)/, x)) return 0
+
   # Check that there is another span of "`" of equal length.
-  if (! (i = match(x[2], "[^`]" x[1] "([^`]|$)"))) return 0
+  if (! (j = match(x[2], "[^`]" x[1] "([^`]|$)"))) return 0
+
   # Replace newlines in the contents by spaces.
-  content = awk::gensub(/\n/, " ", "g", substr(x[2], 1, i))
-  # If there is a space both at start and end, remove it.
-  if (content ~ /^ .*[^ ].* $/) content = substr(content, 2, i - 2)
+  content = awk::gensub(/\n/, " ", "g", substr(x[2], 1, j))
+
+  # If there is a space both at the start and at the end, and at least
+  # one non-space in between, remove the two spaces at start and end.
+  if (content ~ /^ .*[^ ].* $/) content = substr(content, 2, j - 2)
+
   # Store HTML code in replacements.
   t = "<code>" esc_html(content) "</code>"
   push(replacements, t)
   n = size(replacements)
+
   # Return result.
   result["html"] = "\002" n "\003"
-  result["rest"] = substr(x[2], i + length(x[1]) + 1)
+  result["rest"] = substr(x[2], j + length(x[1]) + 1)
   # print "Found inline code <" n "> = " t > "/dev/stderr"
   return 1
 }
 
 
-function inline_autolink(s, no_links, result,	replacements,	x, t, n)
+function inline_autolink(s, i, no_links, replacements, result,
+			 x, t, n)
 {
-  # print "inline_autolink(\"" s "\")" > "/dev/stderr"
-  if (match(s, /^<([a-zA-Z][a-zA-Z0-0+.-]+:[^>[:space:]]+)>(.*)/, x)) {
+  # Check that the "<" is not escaped with a backslash.
+  if (is_escaped(s, i)) return 0
+
+  # print "inline_autolink(\"" s "\", " i ")" > "/dev/stderr"
+
+  # Set s to the text to parse.
+  s = substr(s, i)
+
+  if (match(s, /^<([a-zA-Z][a-zA-Z0-0+.-]+:[^>[:space:]]+)>/, x)) {
+    # A URL
+
     if (no_links) t = esc_html(x[1])
     else t = "<a href=\"" esc_html(esc_url(x[1])) "\">" esc_html(x[1]) "</a>"
-  } else if (match(s, /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>(.*)/, x)) {
+
+  } else if (match(s, /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/, x)) {
+    # An email address
+
     if (no_links) t = esc_html(x[1])
     else t = "<a href=\"mailto:" esc_html(x[1]) "\">" esc_html(x[1]) "</a>"
+
   } else {			# Neither URL nor email address
+
     return 0
   }
+
   push(replacements, t)		# Store the HTML code in replacements
   n = size(replacements)	# Get the index where it was stored
   result["html"] = "\002" n "\003" # The tag to replace the auutolink with
@@ -247,9 +282,17 @@ function inline_autolink(s, no_links, result,	replacements,	x, t, n)
 }
 
 
-function inline_html_tag(s, result, replacements,	x, t, n)
+function inline_html_tag(s, i, replacements, result,
+			 x, t, n)
 {
+  # Check that the "<" is not escaped with a backslash.
+  if (is_escaped(s, i)) return 0
+
   # print "inline_html_tag(\"" s "\",...)" > "/dev/stderr"
+
+  # Set s to the text to parse.
+  s = substr(s, i)
+
   if (((match(s, /^<([a-zA-Z][a-zA-Z0-9_-]*)(\s+[a-zA-Z0-9:_][a-zA-Z0-9_.:-]*(\s*=\s*([^[:space:]"'=<>`]+|"[^"]*"|'[^']*'))?)*\s*\/?>/, x) ||
 	match(s, /^<\/([a-zA-Z][a-zA-Z0-9_-]*)\s*>/, x)) &&
        tolower(x[1]) !~ /^(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)$/) ||
@@ -269,10 +312,18 @@ function inline_html_tag(s, result, replacements,	x, t, n)
 }
 
 
-function inline_link_or_image(s, no_links, result, replacements,
-			      x, t, u, n, i, is_image)
+function inline_link_or_image(s, i, no_links, replacements, result,
+			      x, t, u, n, j, is_image)
 {
-  # print "trying inline_link_or_image(\"" s "\", " no_links ",...)" > "/dev/stderr"
+  # print "inline_link_or_image(\"" s "\", " i ", " no_links ",...)" > "/dev/stderr"
+
+  # Check that the "<" is not escaped with a backslash.
+  if (is_escaped(s, i)) return 0
+
+  # Set s to the text to parse.
+  s = substr(s, i)
+
+  # Check that the text starts with "![" or "[".
   if (s ~ /^!\[/) { is_image = 1; s = substr(s, 3) }
   else if (s ~ /^\[/) { is_image = 0; s = substr(s, 2) }
   else return 0
@@ -283,18 +334,18 @@ function inline_link_or_image(s, no_links, result, replacements,
   # matching "]".
   t = ""
   n = 0
-  while ((i = match(s, /[][]/, x))) {
+  while ((j = match(s, /[][]/, x))) {
     if (x[0] == "[") {
       n++
-      t = t substr(s, 1, i)
-      s = substr(s, i + 1)
+      t = t substr(s, 1, j)
+      s = substr(s, j + 1)
     } else if (n != 0) {
       n--
-      t = t substr(s, 1, i)
-      s = substr(s, i + 1)
+      t = t substr(s, 1, j)
+      s = substr(s, j + 1)
     } else {
-      t = t substr(s, 1, i - 1)
-      s = substr(s, i)
+      t = t substr(s, 1, j - 1)
+      s = substr(s, j)
       break
     }
   }
@@ -305,6 +356,9 @@ function inline_link_or_image(s, no_links, result, replacements,
     #                     1 2     2  3               314    5     5      6     6       7      7  4      8  8
     return 0
 
+  # TODO: Allow balanced () pairs inside the outer (), just like
+  # balanced [] are allowed inside the anchor text above.
+
   # print "Found URL: \"" x[2] x[3] "\"" > "/dev/stderr"
 
   # Convert the anchor text t to HTML. The 1 indicates that no links
@@ -313,14 +367,14 @@ function inline_link_or_image(s, no_links, result, replacements,
 
   # Create the HTML code for the link or image.
   if (is_image) {
-    u = "<img src=\"" esc_html(esc_url(x[2] x[3])) "\"" \
+    u = "<img src=\"" esc_html(esc_url(unesc_md(x[2] x[3]))) "\""	\
       " alt=\"" esc_html(to_text(t)) "\""
     if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
     u = u " />"
   } else if (no_links) {	     # Nested links not allowed, use text only
     u = t
   } else {
-    u = "<a href=\"" esc_html(esc_url(x[2] x[3])) "\""
+    u = "<a href=\"" esc_html(esc_url(unesc_md(x[2] x[3]))) "\""
     if (x[4]) u = u " title=\"" esc_html(unesc_md(x[5] x[6] x[7])) "\""
     u = u ">" t "</a>"
   }
@@ -334,77 +388,341 @@ function inline_link_or_image(s, no_links, result, replacements,
 }
 
 
-function inline_emphasis(s, no_links, result, replacements,	x, y, z, t, n, i, j, result1)
+function inline_emphasis(s, i, no_links, replacements, result,
+			 x, t, u, j, closing, closinglen, len)
 {
-  # print "trying inline_emphasis(\"" s "\",...)" > "/dev/stderr"
-  # if (s !~ /^[_*]/) return 0
-  assert(s ~ /^[_*]/, "s ~ /^[_*]/")
+  assert(substr(s, i, 1) ~ /[*_]/, "substr(s, i, 1) ~ /[*_]/")
 
-  match(s, /^(_+|\*+)/)
-  t = substr(s, 1, RLENGTH)
-  result["rest"] = substr(s, RLENGTH + 1)
+  # print "inline_emphasis(\"" s "\", " i ",...)" > "/dev/stderr"
 
-  while (match(s, /^((_)+|(\*)+)(.*)/, x) &&
-	 (i = match(x[4], "([^[:space:][:punct:]])(" x[2] x[3] "+)(.*)|([[:punct:]])(" x[2] x[3] "+)([[:punct:][:space:]].*|$)", y))) {
+  # Slightly different rules for * and _. (is_left_flanking() vs
+  # is_left_flanking_plus().)
+  #
+  if (substr(s, i, 1) == "*") {
 
-    # Check if there is a left-flanking delimiter of the same type
-    # ("_" or "*") before i. If so, process that one first.
-    j = match(x[4], "(^|[^\\\\])(" x[2] x[3] "+)([^[:space:][:punct:]].*)|(^|[[:space:][:punct:]])(" x[2] x[3] "+)([[:punct:]].*)", z)
-    # print "i=" i " j=" j " x[4]=\"" x[4] "\"" > "/dev/stderr"
-    if (j != 0 && j < i &&
-	inline_emphasis(z[2] z[3]  z[5] z[6], no_links, result1, replacements)) {
-      t = x[1] substr(x[4], 1, j - 1) z[1] z[4] result1["html"]
-      result["rest"] = result1["rest"]
-      s = result["html"] result["rest"]
-    } else {
-      # print "found " x[1] " matched by " y[2] y[5] > "/dev/stderr"
-      n = length(y[2] y[5])
-      if (n > length(x[1])) n = length(x[1])
-      t = inline(substr(x[4], 1, i), no_links, replacements)
-      if (n > 1) {
-	push(replacements, "<strong>")
-	t = "\002" size(replacements) "\003" t
-	push(replacements, "</strong>")
-	t = t "\002" size(replacements) "\003"
+    # Check that this run of *'s is a valid opening delimiter.
+    match(substr(s, i), /^\*+/)
+    if (! is_left_flanking(s, i, RLENGTH)) return 0
+
+    # Loop until all *'s in the run have been consumed, i.e., matched
+    # by a closing delimiter.
+    s = substr(s, i)		# The text to parse
+    match(s, /^(\*+)(.*)/, x)	# x[1] = opening delim, x[2] = rest
+    result["html"] = x[1]	# The current results
+    result["rest"] = x[2]	# The unprocessed rest
+
+    while (x[1] != "") {
+
+      # print "x[1]=\"" x[1] " x[2]=\"" x[2] "\"" > "/dev/stderr"
+
+      # Find a potential closing delimiter.
+      u = x[2]
+      j = 1
+      while (1) {
+	if (! match(u, /\*+/)) { j = 0; break }
+	j += RSTART - 1; len = RLENGTH
+	# print "found a * at j=" j ", len=" len ", is_right_flanking->" is_right_flanking(x[2], j, len) " is_escaped->" is_escaped(x[2], j) > "/dev/stderr"
+	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
+	else if (is_right_flanking(x[2], j, len)) break
+	else { j += len; u = substr(x[2], j) }	# Try again just after the failed match
       }
-      if (n % 2 == 1) {
-	push(replacements, "<em>")
-	t = "\002" size(replacements) "\003" t
-	push(replacements, "</em>")
-	t = t "\002" size(replacements) "\003"
+
+      # If we found no closing delimiter, stop the loop.
+      if (j == 0) break
+
+      closing = j
+      closinglen = len
+      # print "closing=" closing > "/dev/stderr"
+
+      # Find if there is an opening delimiter earlier than the closing
+      # delimiter we found. If so, we have to treat that one first.
+      # The closing delimiter might belong to that.
+      u = x[2]
+      j = 1
+      while (1) {
+	if (! match(u, /\*/)) { j = 0; break }
+	j += RSTART - 1; len = RLENGTH
+	if (j >= closing) break
+	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
+	else if (inline_emphasis(x[2], j, no_links, replacements, result1)) break
+	else { j += len; u = substr(x[2], j) }	# Try again just after the failed match
       }
-      t = substr(s, 1, length(x[1]) - n) t
-      result["rest"] = substr(y[2] y[5], 1, length(y[2] y[5]) - n) y[3] y[6]
-      s = result["html"] result["rest"]
+      # print "j=" j > "/dev/stderr"
+
+      if (j != 0 && j < closing) {
+	# We found and processed an opening delimiter. Replace the
+	# processed part in the string s by the result of processing.
+	result["html"] = x[1] substr(x[2], 1, j - 1) result1["html"]
+	result["rest"] = result1["rest"]
+	s = result["html"] result["rest"]
+	match(s, /^(\*+)(.*)/, x)
+
+      } else {
+	# There is no opening delimiter before the closing delimiter
+	# we found, so the closing delimiter can be used to match the
+	# delimiter we are trying to process.
+	#
+	# Compute the replacement for the text between the opening and
+	# closing delimiters.
+	t = inline(substr(x[2], 1, closing - 1), no_links, replacements)
+	# print "processed \"" substr(x[2], 1, closing - 1) "\" -> \"" t "\"" > "/dev/stderr"
+
+	# Enclose the replacement in <strong> and/or <em>, depending
+	# on how many *'s were matched (= n).
+	n = min(length(x[1]), closinglen)
+	if (n > 1) {
+	  push(replacements, "<strong>")
+	  t = "\002" size(replacements) "\003" t
+	  push(replacements, "</strong>")
+	  t = t "\002" size(replacements) "\003"
+	}
+	if (n % 2 == 1) {
+	  push(replacements, "<em>")
+	  t = "\002" size(replacements) "\003" t
+	  push(replacements, "</em>")
+	  t = t "\002" size(replacements) "\003"
+	}
+
+	# The result so far consists of any remaining *'s of the
+	# opening delimiter, and the replacement just computed.
+	result["html"] = substr(x[1], 1, length(x[1]) - n) t
+	result["rest"] = substr(x[2], closing + n)
+
+	# Replace the processed part of the string s (the matched
+	# opening and closing delimiters and the text in between) by
+	# the result of processing (= t). Restart the loop to process
+	# remaining *'s in the opening delimiter. (There may not be
+	# any left).
+	s = result["html"] result["rest"]
+	match(s, /^(\*+)(.*)/, x)
+      }
     }
+    return 1
+
+  } else {			# "_"
+
+    # Check that this run of "_" is a valid opening delimiter.
+    match(substr(s, i), /^_+/)
+    if (! is_left_flanking_plus(s, i, RLENGTH)) return 0
+
+    # Loop until all _'s in the run have been consumed, i.e., matched
+    # by a closing delimiter.
+    s = substr(s, i)		# The text to parse
+    match(s, /^(_+)(.*)/, x)	# x[1] = opening delim, x[2] = rest
+    result["html"] = x[1]	# The current results
+    result["rest"] = x[2]	# The unprocessed rest
+
+    while (x[1] != "") {
+
+      # print "x[1]=\"" x[1] " x[2]=\"" x[2] "\"" > "/dev/stderr"
+
+      # Find a potential closing delimiter.
+      u = x[2]
+      j = 1
+      while (1) {
+	if (! match(u, /_+/)) { j = 0; break }
+	j += RSTART - 1; len = RLENGTH
+      	# print "found a _ at j=" j ", len=" len ", is_right_flanking_plus = " is_right_flanking_plus(x[2], j, len) > "/dev/stderr"
+	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
+	else if (is_right_flanking_plus(x[2], j, len)) break;
+	else { j += len; u = substr(x[2], j) }	# Try again after the match
+      }
+
+      # If we found no closing delimiter, stop the loop.
+      if (j == 0) break
+
+      closing = j
+      closinglen = len
+      # print "closing=" closing > "/dev/stderr"
+
+      # Find if there is an opening delimiter earlier than the closing
+      # delimiter we found. If so, we have to treat that one first.
+      # The closing delimiter might belong to that.
+      u = x[2]
+      j = 1
+      while (1) {
+	if (! match(u, /_+/)) { j = 0; break }
+	j += RSTART - 1; len = RLENGTH
+	if (j >= closing) break
+	if (is_escaped(x[2], j)) u = substr(x[2], ++j)
+	else if (inline_emphasis(x[2], j, no_links, replacements, result1)) break
+	else { j += len; u = substr(x[2], j) }	# Try again after the match
+      }
+      # print "j=" j > "/dev/stderr"
+
+      if (j != 0 && j < closing) {
+	# We found and processed an opening delimiter. Replace the
+	# processed part in the string s by the result of processing.
+	result["html"] = x[1] substr(x[2], 1, j - 1) result1["html"]
+	result["rest"] = result1["rest"]
+	s = result["html"] result["rest"]
+	match(s, /^(_+)(.*)/, x)
+
+      } else {
+	# There is no opening delimiter before the closing delimiter
+	# we found, so the closing delimiter can be used to match the
+	# delimiter we are trying to process.
+	#
+	# Compute the replacement for the text between the opening and
+	# closing delimiters.
+	t = inline(substr(x[2], 1, closing - 1), no_links, replacements)
+	# print "processed \"" substr(x[2], 1, closing - 1) "\" -> \"" t "\"" > "/dev/stderr"
+
+	# Enclose the replacements in <strong> and/or <em>, depending
+	# on how many _'s were matched (= n).
+	n = min(length(x[1]), closinglen)
+	if (n > 1) {
+	  push(replacements, "<strong>")
+	  t = "\002" size(replacements) "\003" t
+	  push(replacements, "</strong>")
+	  t = t "\002" size(replacements) "\003"
+	}
+	if (n % 2 == 1) {
+	  push(replacements, "<em>")
+	  t = "\002" size(replacements) "\003" t
+	  push(replacements, "</em>")
+	  t = t "\002" size(replacements) "\003"
+	}
+
+	# The result so far consists of any remaining _'s of the
+	# opening delimiter, and the replacement just computed.
+	result["html"] = substr(x[1], 1, length(x[1]) - n) t
+	result["rest"] = substr(x[2], closing + n)
+
+	# Replace the processed part of the string s (the matched
+	# opening and closing delimiters and the text in between) by
+	# the result of processing (= t). Restart the loop to process
+	# remaining *'s in the opening delimiter. (There may not be
+	# any left).
+	s = result["html"] result["rest"]
+	match(s, /^(_+)(.*)/, x)
+      }
+    }
+    return 1
   }
-  push(replacements, t)
-  result["html"] = "\002" size(replacements) "\003"
-  # print "emphasized result = \"" t "\"" > "/dev/stderr"
-  # print "rest = \"" result["rest"] "\"" > "/dev/stderr"
+}
+
+
+function inline_strikethrough(s, i, no_links, replacements, result,
+			      x, j, t)
+{
+  assert(substr(s, i, 1) == "~", "substr(s, i, 1) == \"~\"")
+
+  # Check that there is no uneven number of backslashes before the ~
+  if (is_escaped(s, i)) return 0
+
+  # Check that we have either 1 or 2 ~'s.
+  match(substr(s, i), /^(~+)(.*)/, x)
+  if (length(x[1]) > 2) return 0
+
+  # Set s to the string to parse.
+  s = x[2]
+
+  # Find a matching closing delimiter.
+  t = s
+  j = 0
+  while (1) {
+    if (! match(t, x[1])) {j = 0; break }
+    j += RSTART; t = substr(t, RSTART + RLENGTH)
+    if (is_escaped(s, j)) { j++; t = substr(t, 2) }
+    else if (t !~ /^~/) break	# Not followed by another ~: Success
+  }
+
+  # If we found no closing delimiter, return failure.
+  if (j == 0) return 0
+
+  # Process the text between the two delimiters and enclose the result
+  # in <del> and </del>.
+  t = inline(substr(s, 1, j - 1), no_links, replacements)
+  push(replacements, "<del>")
+  t = "\002" size(replacements) "\003" t
+  push(replacements, "</del>")
+  t = t "\002" size(replacements) "\003"
+
+  result["html"] = t
+  result["rest"] = substr(s, j + length(x[1]))
   return 1
 }
 
 
-function inline_strikethrough(s, no_links, result, replacements,	x, y, t, i)
+# is_left_flanking -- check if the delimiter run at i in s is left-flanking
+function is_left_flanking(s, i, len,	before, after, r)
 {
-  assert(s !~ /^~/, "s !~ /^~/")
-  # print "trying inline_strikethrough(\"" s "\", " no_links ",...)" > "/dev/stderr"
+  # Preceded by an even number of backslashes (including 0) and is a
+  # left-flanking delimiter run.
+  #
+  # A left-flanking delimiter run is a delimiter run that is (1) not
+  # followed by Unicode whitespace, and either (2a) not followed by a
+  # punctuation character, or (2b) followed by a punctuation character
+  # and preceded by Unicode whitespace or a punctuation character. For
+  # purposes of this definition, the beginning and the end of the line
+  # count as Unicode whitespace.
+  before = substr(s, 1, i - 1)
+  after = substr(s, i + len)
+  r = match(before, /\\*$/) && RLENGTH % 2 == 0 &&
+    after ~ /^[^[:space:]]/ &&
+    (after ~ /^[^[:punct:]]/ ||
+     (after ~ /^[[:punct:]]/ && before ~ /(^|[[:space:][:punct:]])$/))
+  # print "is_left_flanking(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
+  return r
+}
 
-  if ((match(s, /^~~(.*)/, x) &&
-       (i = match(x[1], /[^~\\](~~)([^~].*|$)/, y))) ||
-      (match(s, /^~([^~].*)/, x) &&
-       (i = match(x[1], /[^~\\](~)([^~].*|$)/, y)))) {
-    push(replacements, "<s>")
-    t = "\002" size(replacements) "\003"
-    t = t inline(substr(x[1], 1, i), no_links, replacements)
-    push(replacements, "</s>")
-    t = t "\002" size(replacements) "\003"
-    result["html"] = t
-    result["rest"] = y[2]
-    return 1
-  }
-  return 0
+
+function is_left_flanking_plus(s, i, len,		r)
+{
+  # Part of a left-flanking delimiter run and either (a) not part of a
+  # right-flanking delimiter run or (b) part of a right-flanking
+  # delimiter run preceded by punctuation.
+  r = is_left_flanking(s, i, len) &&
+    (! is_right_flanking(s, i, len) || substr(s, 1, i - 1) ~ /[[:punct:]]$/)
+  # print "is_left_flanking_plus(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
+  return r
+}
+
+
+# is_right_flanking -- check if the delimiter run at i in s is right-flanking
+function is_right_flanking(s, i, len,		before, after, r)
+{
+  # Preceded by an even number of backslashes (including 0) and is a
+  # right-flanking delimiter run.
+  #
+  # A right-flanking delimiter run is a delimiter run that is (1) not
+  # preceded by Unicode whitespace, and either (2a) not preceded by a
+  # punctuation character, or (2b) preceded by a punctuation character
+  # and followed by Unicode whitespace or a punctuation character. For
+  # purposes of this definition, the beginning and the end of the line
+  # count as Unicode whitespace.
+  before = substr(s, 1, i - 1)
+  after = substr(s, i + len)
+  r = match(before, /\\*$/) && RLENGTH % 2 == 0 &&
+    before ~ /[^[:space:]]$/ &&
+    (before ~ /[^[:punct:]]$/ ||
+     (before ~ /[[:punct:]]$/ && after ~ /^([[:space:][:punct:]]|$)/))
+  # print "is_right_flanking(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
+  return r
+}
+
+
+function is_right_flanking_plus(s, i, len,	r)
+{
+  r = is_right_flanking(s, i, len) &&
+    (! is_left_flanking(s, i, len) || substr(s, i + len) ~ /^[[:punct:]]/)
+  # print "is_right_flanking_plus(\"" s "\", " i ", " len ") -> " r > "/dev/stderr"
+  return r
+}
+
+
+# is_escaped - check if character i in s is preceded by an uneven number of "\"
+function is_escaped(s, i)
+{
+  return match(substr(s, 1, i - 1), /\\+$/) && RLENGTH % 2 == 1
+}
+
+
+# min -- return the smallest of two values
+function min(a, b)
+{
+  return a < b ? a : b
 }
 
 
@@ -509,9 +827,9 @@ function add_line_to_tree(stack, level, line, curblock, result,
       open_block(stack, result, h " " a["indent"] " " a["type"] " " a["start"],
 	a["type"] ~ /[*+-]/ ? "<ul>\n" :
 		 a["start"] ~ /^0*1$/ ? "<ol>\n" :
-		 "<ol start=\"" a["start"] "\">\n")
+		 "<ol start=\"" (0 + a["start"]) "\">\n")
       open_block(stack, result,
-	"item " a["indent"] " " a["type"] " " a["start"], "<li>")
+	"item " a["indent"] " " a["type"] " " a["start"], "<li>\n")
       open_block(stack, result, "placeholder", "")
       add_line_to_tree(stack, level + 2, a["content"], curblock, result)
     } else if (h == "paragraph") {
@@ -520,6 +838,43 @@ function add_line_to_tree(stack, level, line, curblock, result,
     } else if (h == "fenced-code") {
       open_block(stack, result, h " " a["indent"] " " a["type"],
 	"<pre><code" (a["class"] ? " class=\"" a["class"] "\"" : "") ">")
+
+    } else if (h == "html-block-verbatim") {
+      # print "Opening html-block-verbatim: " line > "/dev/stderr"
+      open_block(stack, result, h, "")
+      push(curblock, line)
+      if (line ~ /<\/([Ss][Cc][Rr][Ii][Pp][Tt]|[Pp][Rr][Ee]|[Ss][Tt][Yy][Ll][Ee])>/)
+	# line contains the end tag as well, end the block immediately.
+	close_blocks(stack, level, curblock, result)
+    } else if (h == "html-block-comment") {
+      open_block(stack, result, h, "")
+      push(curblock, line)
+      if (line ~ /-->/) # line also contains "-->", end the block immediately.
+	close_blocks(stack, level, curblock, result)
+    } else if (h == "html-block-pi") {
+      open_block(stack, result, h, "")
+      push(curblock, line)
+      if (line ~ /\?>/) # line also contains "?>", end the block immediately.
+	close_blocks(stack, level, curblock, result)
+    } else if (h == "html-block-decl") {
+      open_block(stack, result, h, "")
+      push(curblock, line)
+      if (line ~ />/) # line also contains ">", end the block immediately.
+	close_blocks(stack, level, curblock, result)
+    } else if (h == "html-block-cdata") {
+      open_block(stack, result, h, "")
+      push(curblock, line)
+      if (line ~ /]]>/) # line also contains "]]>", end the block immediately.
+	close_blocks(stack, level, curblock, result)
+    } else if (h == "html-block") {
+      # print "Opening html-block: " line > "/dev/stderr"
+      open_block(stack, result, h, "")
+      push(curblock, line)
+    } else if (h == "html-block-tag") {
+      # print "Opening html-block-tag: " line > "/dev/stderr"
+      open_block(stack, result, h, "")
+      push(curblock, line)
+
     } else {
       assert(0, "Unhandled line type " h " in add_line_to_tree")
     }
@@ -538,14 +893,22 @@ function add_line_to_tree(stack, level, line, curblock, result,
       add_line_to_tree(stack, level, line, curblock, result)
       break
     case "paragraph":
-      if (h == "indented-code" || h == "paragraph") {
+      if (h == "indented-code" || h == "paragraph" || h == "html-block-tag" ||
+	  (h == "list" && a["content"] == "") ||
+	  (h == "list" && a["type"] ~ /[.)]/ && a["start"] != "1")) {
 	# The line can be added to the current block as text. Remove
-	# leading spaces.
+	# leading spaces. (A list item with an empty line, or a
+	# numbered list item with a number other than "1.", are
+	# considered to be paragraph continuation lines, rather than
+	# list items.)
+	# print "adding to paragraph (" h ") \"" line "\""
+	# > "/dev/stderr"
 	push(curblock, awk::gensub(/^\s+/, "", 1, line))
       } else {
 	# The line indicates the start of a new block. Close the
 	# paragraph and call self recursively to add that new block to
 	# the stack.
+	# print "closing paragraph to add (" h ") \"" line "\"" > "/dev/stderr"
 	close_blocks(stack, level, curblock, result)
 	add_line_to_tree(stack, level, line, curblock, result)
       }
@@ -617,7 +980,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
 	# list. Close the current item and open a new one.
 	close_blocks(stack, level + 1, curblock, result)
 	open_block(stack, result,
-	  "item " a["indent"] " " a["type"] " " a["start"], "<li>")
+	  "item " a["indent"] " " a["type"] " " a["start"], "<li>\n")
 	open_block(stack, result, "placeholder", "")
 	add_line_to_tree(stack, level + 2, a["content"], curblock, result)
       } else if ((h == "paragraph" || h == "indented-code") &&
@@ -658,6 +1021,58 @@ function add_line_to_tree(stack, level, line, curblock, result,
       close_blocks(stack, level, curblock, result)
       add_line_to_tree(stack, level, line, curblock, result)
       break
+
+    case "html-block-verbatim":
+      # Add the line verbatim.
+      push(curblock, line)
+      # A script, pre or style block ends when the line contains
+      # </script>, </pre> or </style>.
+      if (line ~ /<\/([Ss][Cc][Rr][Ii][Pp][Tt]|[Pp][Rr][Ee]|[Ss][Tt][Yy][Ll][Ee])>/)
+	close_blocks(stack, level, curblock, result)
+      break
+    case "html-block-comment":
+      # Add the line verbatim.
+      push(curblock, line)
+      # An html-block-comment ends when the line contains "-->"
+      if (line ~ /-->/) close_blocks(stack, level, curblock, result)
+      break;
+    case "html-block-pi":
+      # Add the line verbatim.
+      push(curblock, line)
+      # An html-block-pi ends when the line contains "?>"
+      if (line ~ /?>/) close_blocks(stack, level, curblock, result)
+      break;
+    case "html-block-decl":
+      # Add the line verbatim.
+      push(curblock, line)
+      # An html-block-decl ends when the line contains ">"
+      if (line ~ />/) close_blocks(stack, level, curblock, result)
+      break;
+    case "html-block-cdata":
+      # Add the line verbatim.
+      push(curblock, line)
+      # An html-block-cdata ends when the line contains "]]>"
+      if (line ~ /]]>/) close_blocks(stack, level, curblock, result)
+      break;
+    case "html-block":
+      # A blank line ends the HTML block. Other lines are added verbatim.
+      if (h == "blank-line") {
+	close_blocks(stack, level, curblock, result)
+	add_line_to_tree(stack, level, line, curblock, result)
+      } else {
+	push(curblock, line)
+      }
+      break
+    case "html-block-tag":
+      # A blank line ends the HTML block. Other lines are added verbatim.
+      if (h == "blank-line") {
+	close_blocks(stack, level, curblock, result)
+	add_line_to_tree(stack, level, line, curblock, result)
+      } else {
+	push(curblock, line)
+      }
+      break
+
     default:
       assert(0, "Unhandled block type " curtype[1] " in add_line_to_tree")
     }
@@ -688,8 +1103,8 @@ function type_of_line(line, parts,	a, h)
   #   every 4 characters. (list, fenced-code)
   #
   # "start": A string with a decimal number indicating the number of
-  #   the first item in an ordered list. Only defined if "type" ==
-  #   "1". (list)
+  #   the first item in an ordered list. Only defined if "type" is
+  #   "." or ")" (list)
   #
   # "level": A number between 1 and 6 indicating the heading
   #   level. (heading)
@@ -698,48 +1113,78 @@ function type_of_line(line, parts,	a, h)
   # add_line_to_tree() function) should only inspect array items that
   # are defined for the type of line.
 
-  if (match(line, /^\s*$/)) {
+  if (match(line, /^ *$/)) {
     parts["content"] = unindent_line(line, 4)
     return "blank-line"
   } else if (indent_size(line) >= 4) {
     parts["content"] = unindent_line(line, 4)
     return "indented-code"
-  } else if (match(line, /^\s*((```+)([^`]*)|(~~~+)(.*))$/, a)) {
+  } else if (match(line, /^ *((```+)([^`]*)|(~~~+)(.*))$/, a)) {
     parts["type"] = a[2] a[4]
-    parts["info"] = awk::gensub(/^\s+/,"",1,awk::gensub(/\s+$/, "",1,a[3] a[5]))
+    parts["info"] = awk::gensub(/^\s+/,"", 1,
+       awk::gensub(/\s+$/, "", 1, unesc_md(a[3] a[5])))
     parts["class"] = parts["info"] ?
       "language-" awk::gensub(/\s.*/, "", 1, parts["info"]) : ""
     parts["indent"] = indent_size(line)
     return "fenced-code"
-  } else if (match(line, /^\s*>\s?(.*)/, a)) {
+  } else if (match(line, /^ *>\s?(.*)/, a)) {
     parts["content"] = a[1]
     return "blockquote"
-  } else if (match(line, /^\s*((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/)) {
+  } else if (match(line, /^ *((\* *){3,}|(- *){3,}|(_ *){3,})$/)) {
     return "thematic-break"
-  } else if (match(line, /^(\s*)([*+-])(\s(.*[^[:space:]].*))?$/, a)) {
+  } else if (match(line, /^( *)([*+-])( (.*))?$/, a)) {
     parts["content"] = 4 in a ? a[4] : ""
+    sub(/^\s+$/, "", parts["content"]) # Only spaces
     parts["type"] = a[2]
-    if (indent_size(parts["content"]) >= 4) # Starts with indented code block
-      parts["indent"] = indent_size(a[1]) + 2
+    if (parts["content"] == "") # Starts with empty line
+      parts["indent"] = length(a[1]) + 2
+    else if (indent_size(parts["content"]) >= 4) # Starts with indented code block
+      parts["indent"] = length(a[1]) + 2
     else
       parts["indent"] = indent_size(a[1] " " a[3])
+    # print "type of \"" line "\" is list" > "/dev/stderr"
+    # print "indent = " parts["indent"] > "/dev/stderr"
     return "list"
-  } else if (match(line, /^(\s*)([0-9]{1,9})[.\)](\s(.*[^[:space:]].*))?$/, a)) {
-    parts["content"] = 4 in a ? a[4] : ""
+  } else if (match(line, /^( *)([0-9]{1,9})([.)])( (.*))?$/, a)) {
+    parts["content"] = 5 in a ? a[5] : ""
+    sub(/^\s+$/, "", parts["content"]) # Only spaces
     parts["start"] = a[2]
-    parts["type"] = "1"
+    parts["type"] = a[3]	# "." or ")"
     h = awk::gensub(/./, " ", "g", a[2])
-    if (indent_size(parts["content"]) >= 4) # Starts with indented code block
-      parts["indent"] = indent_size(a[1] h " ") + 1
+    if (parts["content"] == "") # Starts with empty line
+      parts["indent"] = length(a[1]) + length(a[2]) + 2
+    else if (indent_size(parts["content"]) >= 4) # Starts with indented code block
+      parts["indent"] = length(a[1]) + length(a[2]) + 2
     else
-      parts["indent"] = indent_size(a[1] h " " a[3])
+      parts["indent"] = indent_size(a[1] h " " a[4])
     return "list"
-  } else if (match(line, /^\s*(#{1,6})(\s+(.*))?$/, a)) {
+  } else if (match(line, /^ *(#{1,6})( +(.*))?$/, a)) {
     parts["content"] = 3 in a ? a[3] : ""
+    sub(/^\s+$/, "", parts["content"]) # Make empty if it only has spaces
     parts["level"] = length(a[1])
-    sub(/(^|\s)+#+\s*$/, "", parts["content"]) # Remove any #'s at the end
+    sub(/(^| +)#+ *$/, "", parts["content"]) # Remove any #'s at the end
     return "heading"
-  } else if (match(line, /^\s*(.*)$/, a)) {
+
+  } else if (match(line, /^ {,3}<([a-zA-Z0-9]+)/, a) &&
+      tolower(a[1]) ~ /^(script|pre|style)$/) {
+    return "html-block-verbatim"
+  } else if (match(line, /^ {,3}<!--/)) {
+    return "html-block-comment"
+  } else if (match(line, /^ {,3}<\?/)) {
+    return "html-block-pi"
+  } else if (match(line, /^ {,3}<![A-Z]/)) {
+    return "html-block-decl"
+  } else if (match(line, /^ {,3}<!\[CDATA\[/)) {
+    return "html-block-cdata"
+  } else if (match(line, /^ {,3}<\/?([a-zA-Z][a-zA-Z0-9]*)(\s+|\/?>|$)/, a) &&
+      tolower(a[1]) ~ /^(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)$/) {
+    return "html-block"
+  } else if ((match(line, /^ {,3}<([a-zA-Z][a-zA-Z0-9-]*)(\s+[a-zA-Z_:][a-zA-Z0-9_.:-]*(\s*=\s*([^[:space:]"'=<>.]+|"[^"]*"|'[^']*'))?)*\s*\/?>\s*$/, a) ||
+	      match(line, /^ {,3}<\/([a-zA-Z][a-zA-Z0-9-]*)\s*>\s*$/, a)) &&
+      tolower(a[1]) !~ /^(script|style|pre)$/) {
+    return "html-block-tag"
+
+  } else if (match(line, /^ *(.*)$/, a)) {
     parts["content"] = a[1]
     return "paragraph"
   }
@@ -848,6 +1293,19 @@ function close_blocks(stack, level, curblock, result,	curtype, h)
       destroy(curblock)
       push(result, "</code></pre>\n")
       break
+
+    case "html-block-verbatim":
+    case "html-block-comment":
+    case "html-block-pi":
+    case "html-block-decl":
+    case "html-block-cdata":
+    case "html-block":
+    case "html-block-tag":
+      h = join(curblock, "\n")
+      if (h != "") push(result, h "\n")
+      destroy(curblock)
+      break;
+
     default:
       assert(0, "Unhandled block type: " curtype[1] " in close_blocks()")
     }
@@ -858,7 +1316,7 @@ function close_blocks(stack, level, curblock, result,	curtype, h)
 
 
 # unesc_md -- unescape backslashed punctuation & character entities in markdown
-function unesc_md(s,	t, a, h)
+function unesc_md(s,	t, a, h, n)
 {
   # Loop over s looking for backslash + punctuation or HTML character
   # entities. Unknown entity references are copied as is. Backslashes
@@ -866,12 +1324,20 @@ function unesc_md(s,	t, a, h)
   # followed by an entity name or number are also copied as-is.
   #
   t = ""
-  while (match(s, /\\([!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~}-])|&([a-zA-Z][a-zA-Z0-9.-]*|#(x[0-9a-fA-F]+|[0-9]+));/, a)) {
-    if (a[0] ~ /^\\/) h = a[1]
-    else if (a[2] ~ /^#x/) h = sprintf("%c", strtonum("0" a[3]))
-    else if (a[2] ~ /^#/) h = sprintf("%c", a[3])
-    else if (a[2] in htmlmathml::ent) h = htmlmathml::ent[a[2]]
-    else h = a[0]		# Unknown named entity, leave as-is
+  while (match(s, /\\([]!"#$%&'()*+,./:;<=>?@[\\^_`{|}~}-])|&([a-zA-Z][a-zA-Z0-9.-]*|#([Xx][0-9a-fA-F]{1,6}|[0-9]{1,7}));/, a)) {
+    if (a[0] ~ /^\\/) {
+      h = a[1]
+    } else if (a[2] ~ /^#[Xx]/) {
+      n = awk::strtonum("0" a[3])
+      h = sprintf("%c", n ? n : 65533) # Replace U+0000 by U+FFFD
+    } else if (a[2] ~ /^#/) {
+      n = 0 + a[3]
+      h = sprintf("%c", n ? n : 65533) # Replace U+0000 by U+FFFD
+    } else if (a[2] in htmlmathml::ent) {
+      h = htmlmathml::ent[a[2]]
+    } else {
+      h = a[0]			# Unknown named entity, leave as-is
+    }
     t = t substr(s, 1, RSTART - 1) h
     s = substr(s, RSTART + RLENGTH)
   }
@@ -897,6 +1363,7 @@ function esc_url(s)
   gsub(/\\/, "%5C", s)
   gsub(/\[/, "%5B", s)		# Not necessary, but matches the spec examples
   gsub(/\]/, "%5D", s)		# Not necessary, but matches the spec examples
+  gsub(/`/, "%60", s)		# Not necessary, but matches the spec examples
   return s
 }
 
