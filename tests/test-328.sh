@@ -1,6 +1,6 @@
 :
 # https://github.github.com/gfm/#example-328
-# Modified: Do not %-escape the URL
+# Modified: Do not %-escape the URL.
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
