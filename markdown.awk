@@ -343,11 +343,6 @@ function inline_html_tag(s, i, replacements, result,
   # Check that the "<" is not escaped with a backslash.
   assert(! is_escaped(s, i), "! is_escaped(s, i)")
 
-  # Check that we're not after a "](", because then we're inside the
-  # destination of a link.
-  # if (substr(s, 1, i - 1) ~ /\]\(\s*$/) return 0
-  # assert(substr(s, 1, i - 1) !~ /\]\([^)]*$/, "substr(s, 1, i - 1) !~ /\\]\\([^)]*$/)")
-
   # print "inline_html_tag(\"" s "\",...)" > "/dev/stderr"
 
   # Set s to the text to parse.
