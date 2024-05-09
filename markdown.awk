@@ -170,8 +170,7 @@ function inline(s, no_links, replacements,		result, t, i, x)
       t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
     } else {			# Apparently not a delimiter, take it literally
-      push(replacements, esc_html(x[0]))
-      t = t substr(s, 1, i - 1) "\002" size(replacements) "\003"
+      t = t substr(s, 1, i - 1) "\002" push(replacements, esc_html(x[0])) "\003"
       s = substr(s, i + length(x[0]))
     }
   s = t s
@@ -188,8 +187,7 @@ function inline(s, no_links, replacements,		result, t, i, x)
       t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
     } else {			# Apparently not an opening delimiter, skip it
-      push(replacements, x[0])
-      t = t substr(s, 1, i - 1) "\002" size(replacements) "\003"
+      t = t substr(s, 1, i - 1) "\002" push(replacements, x[0]) "\003"
       s = substr(s, i + length(x[0]))
     }
   s = t s
@@ -205,16 +203,14 @@ function inline(s, no_links, replacements,		result, t, i, x)
       t = t substr(s, 1, i - 1) result["html"]
       s = result["rest"]
     } else {			# Apparently not a valid delimiter. Skip it.
-      push(replacements, x[0])
-      t = t substr(s, 1, i - 1) "\002" size(replacements)"\003"
+      t = t substr(s, 1, i - 1) "\002" push(replacements, x[0]) "\003"
       s = substr(s, i + length(x[0]))
     }
   s = t s
 
   # Replace hard line breaks by <br> and remove backslash escapes.
   #
-  push(replacements, "<br />\n")
-  t = "\002" size(replacements) "\003"
+  t = "\002" push(replacements, "<br />\n") "\003"
   s = awk::gensub(/ \n/, "\n", "g",
     awk::gensub(/(  +|\\)\n/, t, "g", esc_html(unesc_md(s))))
 
@@ -260,8 +256,7 @@ function inline_code_span(s, i, replacements, result,
 
   # Store HTML code in replacements.
   t = "<code>" esc_html(content) "</code>"
-  push(replacements, t)
-  n = size(replacements)
+  n = push(replacements, t)
 
   # Return result.
   result["html"] = "\002" n "\003"
@@ -315,8 +310,7 @@ function inline_autolink(s, i, no_links, replacements, result,
     return 0
   }
 
-  push(replacements, t)		# Store the HTML code in replacements
-  n = size(replacements)	# Get the index where it was stored
+  n = push(replacements, t) # Store the HTML code in replacements, get its index
   result["html"] = "\002" n "\003" # The tag to replace the auutolink with
   result["rest"] = substr(s, length(x[0]) + 1)
   # print "Found autolink <" n "> = " t > "/dev/stderr"
@@ -356,8 +350,7 @@ function inline_html_tag(s, i, replacements, result,
       match(s, /^<![a-zA-Z][^>]*>/, x) ||
       match(s, /^<\?([^?>]|\?[^>])*\?>/, x)) {
     t = x[0]			# Copy the tag verbatim
-    push(replacements, t)	# Store the HTML code in replacements
-    n = size(replacements)	# Get the index where it was stored
+    n = push(replacements, t) # # Store HTML code in replacements, get its index
     result["html"] = "\002" n "\003"	# The tag to replace the auutolink with
     result["rest"] = substr(s, length(x[0]) + 1)
     # print "Found HTML tag <" n "> = " t > "/dev/stderr"
@@ -414,8 +407,7 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 	  inline_html_tag(s, j, replacements, result1)) {
 	t = t substr(s, 1, j - 1) result1["html"]; s = result1["rest"]
       } else {			# delimiter that does not start anything
-	push(replacements, esc_html(x[0]))
-	t = t substr(s, 1, i - 1) "\002" size(replacements) "\003"
+	t = t substr(s, 1, i-1) "\002" push(replacements, esc_html(x[0])) "\003"
 	s = substr(s, i + length(x[0]))
       }
     } else if (x[0] == "![") {
@@ -424,8 +416,7 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 	t = t substr(s, 1, j - 1) result1["html"]; s = result1["rest"]
       } else {			# delimiter that does not start anything
 	n++
-	push(replacements, esc_html(x[0]))
-	t = t substr(s, 1, i - 1) "\002" size(replacements) "\003"
+	t = t substr(s, 1, i-1) "\002" push(replacements, esc_html(x[0])) "\003"
 	s = substr(s, i + length(x[0]))
       }
     } else if (x[0] == "[") {
@@ -512,8 +503,7 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 
   # Store the HTML code in replacements at index n and return a tag
   # "<n>".
-  push(replacements, u)
-  result["html"] = "\002" size(replacements) "\003"
+  result["html"] = "\002" push(replacements, u) "\003"
   result["rest"] = s
   # print "\"" u "\" -> " size(replacements) > "/dev/stderr"
   return 1
@@ -611,8 +601,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
     if (j != 0) {
       # We found and processed an opening delimiter. Replace the
       # processed part in the string s by the result of processing.
-      push(replacements, result1["html"])
-      t = "\002" size(replacements) "\003"
+      t = "\002" push(replacements, result1["html"]) "\003"
       result["html"] = x[1] substr(x[2], 1, j - 1) t
       result["rest"] = result1["rest"]
       s = result["html"] result["rest"]
@@ -632,16 +621,12 @@ function inline_emphasis(s, i, no_links, replacements, result,
       # how many *'s were matched (= n).
       n = min(length(x[1]), closinglen)
       for (j = n; j > 1; j -= 2) {
-	push(replacements, "<strong>")
-	t = "\002" size(replacements) "\003" t
-	push(replacements, "</strong>")
-	t = t "\002" size(replacements) "\003"
+	t = "\002" push(replacements, "<strong>") "\003" t
+	t = t "\002" push(replacements, "</strong>") "\003"
       }
       if (n % 2 == 1) {
-	push(replacements, "<em>")
-	t = "\002" size(replacements) "\003" t
-	push(replacements, "</em>")
-	t = t "\002" size(replacements) "\003"
+	t = "\002" push(replacements, "<em>") "\003" t
+	t = t "\002" push(replacements, "</em>") "\003"
       }
 
       # The result so far consists of any remaining part of the
@@ -708,10 +693,8 @@ function inline_strikethrough(s, i, no_links, replacements, result,
   # Process the text between the two delimiters and enclose the result
   # in <del> and </del>.
   t = inline(substr(s, 1, j - 1), no_links, replacements)
-  push(replacements, "<del>")
-  t = "\002" size(replacements) "\003" t
-  push(replacements, "</del>")
-  t = t "\002" size(replacements) "\003"
+  t = "\002" push(replacements, "<del>") "\003" t
+  t = t "\002" push(replacements, "</del>") "\003"
 
   result["html"] = t
   result["rest"] = substr(s, j + length(x[1]))
@@ -1475,7 +1458,7 @@ function esc_url(s)
 # queue/stack is empty.
 
 
-# push -- add a value to a stack or a queue, return the value
+# push -- add a value to a stack or a queue, return its index
 function push(stack, value)
 {
   # If stack is uninitialized, initialize it
@@ -1484,7 +1467,7 @@ function push(stack, value)
     stack["last"] = 0
   }
   stack[++stack["last"]] = value
-  return value
+  return stack["last"]
 }
 
 
@@ -1507,7 +1490,7 @@ function top(stack)
 }
 
 
-# shift -- add an item at the start of a queue, return the item
+# shift -- add an item at the start of a queue, return its index
 function shift(queue, value)
 {
   # If the queue is uninitialized, initialize it
@@ -1516,7 +1499,7 @@ function shift(queue, value)
     queue["last"] = 0
   }
   queue[--queue["first"]] = value
-  return value
+  return queue["first"]
 }
 
 
