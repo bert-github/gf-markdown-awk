@@ -1,6 +1,7 @@
 :
 # https://github.github.com/gfm/#example-657
-# Modified: both "<" and ">" escaped, rather than only "<".
+
+exit 2				# Not applicable
 
 trap 'rm -f $IN $EXPECT $OUT' 0
 IN=`mktemp /tmp/test-XXXXXX`
@@ -16,9 +17,9 @@ cat >$IN <<EOF
 EOF
 
 cat >$EXPECT <<EOF
-<p><strong> &lt;title&gt; &lt;style&gt; <em></p>
+<p><strong> &lt;title> &lt;style> <em></p>
 <blockquote>
-  &lt;xmp&gt; is disallowed.  &lt;XMP&gt; is also disallowed.
+  &lt;xmp> is disallowed.  &lt;XMP> is also disallowed.
 </blockquote>
 EOF
 
