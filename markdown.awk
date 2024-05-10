@@ -294,13 +294,13 @@ function inline_autolink(s, i, no_links, replacements, result,
   s = substr(s, i)
 
   if (match(s, /^<([a-zA-Z][a-zA-Z0-0+.-]+:[^>[:space:]]+)>/, x)) {
-    # A URL
+    # A URL: "...:..."
 
     if (no_links) t = esc_html(x[1])
     else t = "<a href=\"" esc_html(esc_url(x[1])) "\">" esc_html(x[1]) "</a>"
 
   } else if (match(s, /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/, x)) {
-    # An email address
+    # An email address: "...@..."
 
     if (no_links) t = esc_html(x[1])
     else t = "<a href=\"mailto:" esc_html(x[1]) "\">" esc_html(x[1]) "</a>"
@@ -374,8 +374,7 @@ function inline_link_or_image(s, i, no_links, replacements, result,
   # replacements: a stack of HTML fragments. (Passed by reference.)
   #
   # result: an array in which the function returns the result of
-  # parsing the link and the remaining text of s after the
-  # autolink.
+  # parsing the link and the remaining text of s after the link.
   #
   # Returns 1 for success, 0 for failure.
 
@@ -403,9 +402,14 @@ function inline_link_or_image(s, i, no_links, replacements, result,
       t = t substr(s, 1, j); s = substr(s, j + 1)
     } else if (x[0] ~ /^[`<]/) {
       if (inline_code_span(s, j, replacements, result1) ||
-	  inline_autolink(s, j, no_links, replacements, result1) ||
 	  inline_html_tag(s, j, replacements, result1)) {
 	t = t substr(s, 1, j - 1) result1["html"]; s = result1["rest"]
+      } else if (inline_autolink(s, j, 1, replacements, result1)) {
+	if (! is_image) {
+	  return 0		# Nested link, so the outer link isn't one
+	} else {		# Allowed in image alt text (but as text)
+	  t = t substr(s, 1, j - 1) result1["html"]; s = result1["rest"]
+	}
       } else {			# delimiter that does not start anything
 	t = t substr(s, 1, i-1) "\002" push(replacements, esc_html(x[0])) "\003"
 	s = substr(s, i + length(x[0]))
@@ -420,18 +424,14 @@ function inline_link_or_image(s, i, no_links, replacements, result,
 	s = substr(s, i + length(x[0]))
       }
     } else if (x[0] == "[") {
-      if (! is_image) {		# We're inside a link "[...](...)"
-	if (inline_link_or_image(s, j)) {
-	  return 0
-	} else {		# "[" that does not start a link
-	  n++; t = t substr(s, i, j); s = substr(s, j + 1)
-	}
-      } else {			# We're inside an image "![...](...)"
-	if (inline_link_or_image(s, j, 1, replacements, result1)) {
+      if (inline_link_or_image(s, j, 1, replacements, result1)) {
+	if (! is_image) {	# We're inside a link "[...](...)"
+	  return 0		# Nested link, so the outer link isn't a link
+	} else {		# We're inside an image "![...](...)"
 	  t = t substr(s, 1, j - 1) result1["html"]; s = result1["rest"]
-	} else {		# "[" that does not start a link
-	  n++; t = t substr(s, i, j); s = substr(s, j + 1)
 	}
+      } else {			# "[" that does not start a link
+	  n++; t = t substr(s, i, j); s = substr(s, j + 1)
       }
     } else if (n != 0) {	# Balanced "]"
       n--; t = t substr(s, i, j); s = substr(s, j + 1)
