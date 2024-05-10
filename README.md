@@ -44,13 +44,18 @@ Here are the known differences from the [specification](https://github.github.co
 
 The specification says that tabs are replaced by spaces only when they take part in determining the indentation of an input line. Tabs inside the contents of a line are passed through unchanged. This implementation expands all tabs to spaces. (But that might change in the future.)
 
-### `> in disallowed raw HTML
+### `>` in disallowed raw HTML
 
 When encountering disallowed tags (`<title>`, `<textarea>`, `<style>` and others), this implementation replaces their `<` and `>` by `&lt;` and `&gt;`. The specification only replaces the `<`.
 
 ### Backslash in HTML tags
 
 The specification does not allows backslashes to occur in HTML tags, except just before a newline. The implementation doesn't allow them before a newline either.
+
+### No nested links
+
+Not a difference from the specification, but a difference from the cmark and cmark-gfm implementations: Input such as such as `[<http://example.org/>](url)` produces `[<a href="http://example.org/">http://example.org/</a>](url)`. (If multiple link definitions appear nested inside each other, the inner-most definition is used.) But cmark/cmark-gfm produce `<a href="url"><a href="http://example.org/">http://example.org/</a></a>`.
+
 
 ## Bugs
 
@@ -67,6 +72,4 @@ should create an empty list item and a paragraph, but instead creates a list ite
 ‘Rule 10’ is not implemented. It says that `*foo**bar*` should be `<em>foo**bar</em>`, but the current implementation produces `<em>foo</em<em>bar</em>` instead.
 
 When two potential emphasis spans overlap, it is not always the first that takes precedence. (Violates ‘rule 15’.)
-
-It is possible to create a nested link by putting an autolink inside another link: `[a link <http://example.org/path1> inside anchor text](http://example.org/path2)`. (The cmark and cmark-gfm implementations do this, too.)
 
