@@ -71,7 +71,7 @@
 #
 # markdown::version()
 #
-#     Returns the version of this library, currently "0.2".
+#     Returns the version of this library, currently "0.3".
 #
 #
 # Copyright © 2023-2024 World Wide Web Consortium.
@@ -88,7 +88,7 @@
 # version -- return the version number of this library
 function version()
 {
-  return "0.2"
+  return "0.3"
 }
 
 
@@ -563,7 +563,7 @@ function inline_emphasis(s, i, no_links, replacements, result,
 
     # Find a potential closing delimiter.
     # TODO: Apply rule 10 which says that "*foo**bar*" is
-    # "<em>foo**bar</em>" rather than "is "<em>foo</em<em>bar</em>".
+    # "<em>foo**bar</em>" rather than "<em>foo</em<em>bar</em>".
     # (https://github.github.com/gfm/#emphasis-and-strong-emphasis)
     u = x[2]
     j = 1
