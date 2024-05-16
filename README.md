@@ -22,7 +22,7 @@ The former is provided by the function `markdown::to_inline_html()`, the latter 
 
 ## Limitations
 
-The code does not currently implement ‘setexts headings’ (headings that are underlined instead of prefixed with one or more ‘#’ characters), ‘tight lists’ (lists where the generated HTML looks like `<li>item</li>` instead of `<li><p>item</p></li>`), tables, and CDATA sections (`<!CDATA[...]>`).
+The code does not currently implement ‘setexts headings’ (headings that are underlined instead of prefixed with one or more ‘#’ characters), ‘tight lists’ (lists where the generated HTML looks like `<li>item</li>` instead of `<li><p>item</p></li>`), and tables.
 
 Character entities, such as `&eacute;` and `&#233;`, only expand correctly in UTF-8 locales.
 
