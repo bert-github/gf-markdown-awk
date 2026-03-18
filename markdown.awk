@@ -1110,7 +1110,7 @@ function add_line_to_tree(stack, level, line, curblock, result,
       # Add the line verbatim.
       push(curblock, line)
       # An html-block-pi ends when the line contains "?>"
-      if (line ~ /?>/) close_blocks(stack, level, curblock, result)
+      if (line ~ /\?>/) close_blocks(stack, level, curblock, result)
       break;
     case "html-block-decl":
       # Add the line verbatim.
